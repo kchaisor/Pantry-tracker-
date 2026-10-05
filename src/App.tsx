@@ -13,6 +13,7 @@ import { Toolbar } from './components/Toolbar.tsx'
 import { Welcome } from './components/Welcome.tsx'
 import { CATEGORIES, DEFAULT_UNIT, INSTALL_HINT_KEY, WELCOME_KEY } from './constants.ts'
 import { emptyDraft, usePantry } from './hooks/usePantry.ts'
+import { useSheetSync } from './hooks/useSheetSync.ts'
 import { maybeLocalNotify, syncAppBadge } from './lib/alerts.ts'
 import { findBarcodeMatch, normalizeBarcode } from './lib/barcode.ts'
 import { lookupProduct } from './lib/productLookup.ts'
@@ -47,6 +48,15 @@ function writeFlag(key: string): void {
 
 export default function App() {
   const pantry = usePantry()
+  const sheetSync = useSheetSync(pantry.refreshFromSync)
+
+  const { setLocalChangeHandler } = pantry
+  const { scheduleSync } = sheetSync
+
+  useEffect(() => {
+    setLocalChangeHandler(scheduleSync)
+    return () => setLocalChangeHandler(null)
+  }, [setLocalChangeHandler, scheduleSync])
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [stock, setStock] = useState<StockFilter>('all')
@@ -413,6 +423,9 @@ export default function App() {
         <Settings
           items={pantry.items}
           alertPrefs={alertPrefs}
+          syncState={sheetSync.syncState}
+          onSaveSyncUrl={sheetSync.saveSyncUrl}
+          onSyncNow={() => void sheetSync.syncNow()}
           onAlertPrefs={(prefs) => {
             writeAlertPrefs(prefs)
             setAlertPrefs(prefs)

@@ -8,6 +8,7 @@ import { sampleItems } from '../lib/sampleData.ts'
 import { isLowStock } from '../lib/stock.ts'
 import { deleteItem, loadItems, replaceAll, saveItem } from '../lib/storage.ts'
 import { newId, normalizeItem } from '../lib/backup.ts'
+import { visiblePantryItems } from '../lib/syncMerge.ts'
 import type { ItemDraft, LastAddPrefs, PantryItem } from '../types.ts'
 
 export function emptyDraft(prefs?: LastAddPrefs | null): ItemDraft {
@@ -58,23 +59,31 @@ function rememberAdd(item: PantryItem): void {
   rememberRecent({ name: item.name, unit: item.unit, category: item.category })
 }
 
+function setVisibleItems(raw: PantryItem[]): PantryItem[] {
+  return visiblePantryItems(raw.map((row) => normalizeItem(row) ?? row))
+}
+
 export function usePantry() {
   const [items, setItems] = useState<PantryItem[]>([])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const itemsRef = useRef<PantryItem[]>([])
+  const onLocalChangeRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     itemsRef.current = items
   }, [items])
+
+  const notifyLocalChange = useCallback(() => {
+    onLocalChangeRef.current?.()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     loadItems()
       .then((loaded) => {
         if (cancelled) return
-        const normalized = loaded.map((row) => normalizeItem(row) ?? row)
-        setItems(normalized)
+        setItems(setVisibleItems(loaded))
         setReady(true)
       })
       .catch(() => {
@@ -88,15 +97,20 @@ export function usePantry() {
     }
   }, [])
 
-  const upsert = useCallback(async (item: PantryItem) => {
-    setItems((current) => {
-      const exists = current.some((entry) => entry.id === item.id)
-      return exists
-        ? current.map((entry) => (entry.id === item.id ? item : entry))
-        : [item, ...current]
-    })
-    await saveItem(item)
-  }, [])
+  const upsert = useCallback(
+    async (item: PantryItem) => {
+      const next = { ...item, deleted: false }
+      setItems((current) => {
+        const exists = current.some((entry) => entry.id === next.id)
+        return exists
+          ? current.map((entry) => (entry.id === next.id ? next : entry))
+          : [next, ...current]
+      })
+      await saveItem(next)
+      notifyLocalChange()
+    },
+    [notifyLocalChange],
+  )
 
   const addItem = useCallback(
     async (draft: ItemDraft) => {
@@ -133,10 +147,14 @@ export function usePantry() {
     [upsert],
   )
 
-  const removeItem = useCallback(async (id: string) => {
-    setItems((current) => current.filter((item) => item.id !== id))
-    await deleteItem(id)
-  }, [])
+  const removeItem = useCallback(
+    async (id: string) => {
+      setItems((current) => current.filter((item) => item.id !== id))
+      await deleteItem(id)
+      notifyLocalChange()
+    },
+    [notifyLocalChange],
+  )
 
   const patchItem = useCallback(
     async (id: string, mutate: (item: PantryItem) => PantryItem) => {
@@ -145,9 +163,10 @@ export function usePantry() {
       const next = mutate(existing)
       setItems((current) => current.map((item) => (item.id === id ? next : item)))
       await saveItem(next)
+      notifyLocalChange()
       return next
     },
-    [],
+    [notifyLocalChange],
   )
 
   const adjustQuantity = useCallback(
@@ -206,23 +225,40 @@ export function usePantry() {
     const samples = sampleItems()
     setItems(samples)
     await replaceAll(samples)
+    notifyLocalChange()
+  }, [notifyLocalChange])
+
+  const replaceItems = useCallback(
+    async (next: PantryItem[]) => {
+      const normalized = next.map((row) => normalizeItem(row) ?? row)
+      setItems(setVisibleItems(normalized))
+      await replaceAll(normalized)
+      notifyLocalChange()
+    },
+    [notifyLocalChange],
+  )
+
+  const mergeItems = useCallback(
+    async (incoming: PantryItem[]) => {
+      const map = new Map(itemsRef.current.map((item) => [item.id, item]))
+      for (const row of incoming) {
+        const item = normalizeItem(row) ?? row
+        map.set(item.id, item)
+      }
+      const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt)
+      setItems(setVisibleItems(merged))
+      await replaceAll(merged)
+      notifyLocalChange()
+    },
+    [notifyLocalChange],
+  )
+
+  const setLocalChangeHandler = useCallback((handler: (() => void) | null) => {
+    onLocalChangeRef.current = handler
   }, [])
 
-  const replaceItems = useCallback(async (next: PantryItem[]) => {
-    const normalized = next.map((row) => normalizeItem(row) ?? row)
-    setItems(normalized)
-    await replaceAll(normalized)
-  }, [])
-
-  const mergeItems = useCallback(async (incoming: PantryItem[]) => {
-    const map = new Map(itemsRef.current.map((item) => [item.id, item]))
-    for (const row of incoming) {
-      const item = normalizeItem(row) ?? row
-      map.set(item.id, item)
-    }
-    const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt)
-    setItems(merged)
-    await replaceAll(merged)
+  const refreshFromSync = useCallback(async (merged: PantryItem[]) => {
+    setItems(setVisibleItems(merged))
   }, [])
 
   const stats = useMemo(
@@ -249,5 +285,7 @@ export function usePantry() {
     loadSamples,
     replaceItems,
     mergeItems,
+    setLocalChangeHandler,
+    refreshFromSync,
   }
 }

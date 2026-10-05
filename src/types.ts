@@ -47,6 +47,8 @@ export interface PantryItem {
   barcode: string
   createdAt: number
   updatedAt: number
+  /** Tombstone for sheet sync; hidden in UI when true. */
+  deleted?: boolean
 }
 
 export interface ItemDraft {
