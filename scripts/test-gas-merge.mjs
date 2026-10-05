@@ -12,11 +12,11 @@ const source = readFileSync(join(dir, '../apps-script/mergeLib.js'), 'utf8').rep
 const sandbox = {}
 const fn = new Function(
   'sandbox',
-  `${source}\nsandbox.mergeSyncItems = mergeSyncItems; sandbox.parseSyncTimestamp = parseSyncTimestamp;`,
+  `${source}\nsandbox.mergeSyncItems = mergeSyncItems; sandbox.parseSyncTimestamp = parseSyncTimestamp; sandbox.parseExpiryDate = parseExpiryDate;`,
 )
 fn(sandbox)
 
-const { mergeSyncItems } = sandbox
+const { mergeSyncItems, parseSyncTimestamp, parseExpiryDate } = sandbox
 
 const a = [
   {
@@ -55,4 +55,17 @@ const b = [
 const merged = mergeSyncItems(a, b)
 assert.equal(merged.length, 1)
 assert.equal(merged[0].name, 'New')
-console.log('apps-script/mergeLib.js merge sanity check passed')
+
+// #1: null rows from blank-name sheet lines must not crash merge
+const withNull = mergeSyncItems([null, a[0]], b)
+assert.equal(withNull.length, 1)
+assert.equal(withNull[0].name, 'New')
+
+// #2: Date cells and full epoch ms (not scientific display strings)
+const epoch = 1_759_650_000_000
+assert.equal(parseSyncTimestamp(epoch), epoch)
+assert.equal(parseSyncTimestamp(new Date(epoch)), epoch)
+const expiry = parseExpiryDate(new Date('2026-10-12T12:00:00Z'), '', 'UTC')
+assert.equal(expiry, '2026-10-12')
+
+console.log('apps-script/mergeLib.js merge + read helpers sanity check passed')

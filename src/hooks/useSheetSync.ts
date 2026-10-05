@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  mergeLocalWithRemote,
+  postItemsToSheet,
   readSyncState,
   recordSyncError,
-  syncWithSheet,
   writeSyncUrl,
   type SyncState,
 } from '../lib/sheetSync.ts'
@@ -16,6 +17,7 @@ const PERIODIC_MS = 60_000
 export function useSheetSync(onSynced: (items: PantryItem[]) => Promise<void>) {
   const [syncState, setSyncState] = useState<SyncState>(() => readSyncState())
   const syncingRef = useRef(false)
+  const dirtyRef = useRef(false)
   const debounceRef = useRef<number | null>(null)
   const onSyncedRef = useRef(onSynced)
 
@@ -26,11 +28,16 @@ export function useSheetSync(onSynced: (items: PantryItem[]) => Promise<void>) {
   const runSync = useCallback(async () => {
     const { url } = readSyncState()
     if (!url) return
-    if (syncingRef.current) return
+    if (syncingRef.current) {
+      dirtyRef.current = true
+      return
+    }
     syncingRef.current = true
     try {
-      const local = await loadItems()
-      const merged = await syncWithSheet(url, local)
+      const localAtPost = await loadItems()
+      const remoteItems = await postItemsToSheet(url, localAtPost)
+      const freshLocal = await loadItems()
+      const merged = mergeLocalWithRemote(freshLocal, remoteItems)
       await replaceAll(merged)
       await onSyncedRef.current(visiblePantryItems(merged))
       setSyncState(readSyncState())
@@ -40,15 +47,27 @@ export function useSheetSync(onSynced: (items: PantryItem[]) => Promise<void>) {
       setSyncState(readSyncState())
     } finally {
       syncingRef.current = false
+      if (dirtyRef.current) {
+        dirtyRef.current = false
+        void runSync()
+      }
     }
   }, [])
 
   const scheduleSync = useCallback(() => {
     const { url } = readSyncState()
     if (!url) return
+    if (syncingRef.current) {
+      dirtyRef.current = true
+      return
+    }
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null
+      if (syncingRef.current) {
+        dirtyRef.current = true
+        return
+      }
       void runSync()
     }, DEBOUNCE_MS)
   }, [runSync])

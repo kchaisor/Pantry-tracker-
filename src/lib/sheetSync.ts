@@ -111,11 +111,11 @@ async function parseSyncResponse(res: Response): Promise<SyncItem[]> {
     .filter((item): item is SyncItem => item !== null)
 }
 
-/** POST all local items; server merges with sheet and returns full list. */
-export async function syncWithSheet(
+/** POST all local items; server merges with sheet and returns the remote item list. */
+export async function postItemsToSheet(
   syncUrl: string,
   localItems: PantryItem[],
-): Promise<PantryItem[]> {
+): Promise<SyncItem[]> {
   const payload = JSON.stringify({ items: localItemsToSyncPayload(localItems) })
 
   let res: Response
@@ -134,9 +134,22 @@ export async function syncWithSheet(
   }
 
   const remoteItems = await parseSyncResponse(res)
-  const merged = applySyncResponse(localItems, remoteItems)
   writeSyncOutcome(true, null)
-  return merged
+  return remoteItems
+}
+
+/** Merge a fresh local snapshot with the server list (call after POST returns). */
+export function mergeLocalWithRemote(local: PantryItem[], remoteItems: SyncItem[]): PantryItem[] {
+  return applySyncResponse(local, remoteItems)
+}
+
+/** POST all local items; server merges with sheet and returns full merged local rows. */
+export async function syncWithSheet(
+  syncUrl: string,
+  localItems: PantryItem[],
+): Promise<PantryItem[]> {
+  const remoteItems = await postItemsToSheet(syncUrl, localItems)
+  return applySyncResponse(localItems, remoteItems)
 }
 
 /** GET current sheet items (optional sanity / read-only). */

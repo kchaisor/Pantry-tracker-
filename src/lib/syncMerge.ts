@@ -4,6 +4,7 @@ import type { PantryItem } from '../types.ts'
 export type SyncItem = PantryItem & { deleted: boolean }
 
 export function parseSyncTimestamp(value: unknown, fallback = 0): number {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime()
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
     const n = Number(value)

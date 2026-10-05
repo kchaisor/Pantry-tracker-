@@ -84,6 +84,8 @@ After deploy, add an `onEdit` trigger if you want sheet UI edits to bump `update
 
 Sync runs when you open the app, when the device goes online, when the tab becomes visible, shortly after local edits, and about once a minute while the app is open. Failures (offline, bad token, Google errors) leave local data unchanged and show an error in Settings.
 
+**Replace pantry** (JSON restore) and **Load sample data** overwrite local rows without tombstones. Anything still on the sheet can reappear on the next sync — use sheet tombstones (`deleted=TRUE`) if you need those rows gone everywhere.
+
 ## Backup and restore
 
 Open **Settings** (gear in the header).

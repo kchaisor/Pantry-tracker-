@@ -1,10 +1,11 @@
 /**
  * Pure merge helpers for Apps Script (also sanity-checked under Node).
- * Keep in sync with src/lib/syncMerge.ts
+ * Keep in sync with src/lib/syncMerge.ts where applicable.
  */
 
 function parseSyncTimestamp(value, fallback) {
   if (fallback === void 0) fallback = 0
+  if (value instanceof Date && !isNaN(value.getTime())) return value.getTime()
   if (typeof value === 'number' && isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
     var n = Number(value)
@@ -13,6 +14,22 @@ function parseSyncTimestamp(value, fallback) {
     if (!isNaN(parsed)) return parsed
   }
   return fallback
+}
+
+function parseExpiryDate(cellValue, displayValue, timeZone) {
+  if (cellValue instanceof Date && !isNaN(cellValue.getTime())) {
+    if (typeof Utilities !== 'undefined' && Utilities.formatDate) {
+      return Utilities.formatDate(
+        cellValue,
+        timeZone || (typeof Session !== 'undefined' ? Session.getScriptTimeZone() : 'Etc/GMT'),
+        'yyyy-MM-dd',
+      )
+    }
+    return cellValue.toISOString().slice(0, 10)
+  }
+  var expiry = String(displayValue != null ? displayValue : cellValue || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return expiry
+  return null
 }
 
 function isDeletedFlag(value) {
@@ -28,6 +45,7 @@ function mergeSyncItems(a, b) {
   var map = {}
 
   function consider(item) {
+    if (!item) return
     var id = String(item.id || '').trim()
     if (!id) return
     var existing = map[id]
@@ -50,5 +68,5 @@ function mergeSyncItems(a, b) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseSyncTimestamp, isDeletedFlag, mergeSyncItems }
+  module.exports = { parseSyncTimestamp, parseExpiryDate, isDeletedFlag, mergeSyncItems }
 }

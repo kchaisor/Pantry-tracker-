@@ -135,13 +135,15 @@ function readAllItems_(optSheet) {
 
   var numRows = lastRow - 1
   var range = sheet.getRange(2, 1, numRows, HEADERS.length)
+  var values = range.getValues()
   var display = range.getDisplayValues()
+  var timeZone = sheet.getParent().getSpreadsheetTimeZone()
   var items = []
 
-  for (var r = 0; r < display.length; r++) {
-    var row = display[r]
-    if (isEmptyDataRow_(row)) continue
-    items.push(rowToItem_(row))
+  for (var r = 0; r < values.length; r++) {
+    if (isEmptyDataRow_(display[r])) continue
+    var item = rowToItem_(values[r], display[r], timeZone)
+    if (item) items.push(item)
   }
   return items
 }
@@ -153,31 +155,29 @@ function isEmptyDataRow_(row) {
   return true
 }
 
-function rowToItem_(row) {
+function rowToItem_(valuesRow, displayRow, timeZone) {
   var now = Date.now()
-  var name = String(row[1] || '').trim()
+  var name = String(displayRow[1] || '').trim()
   if (!name) return null
 
-  var expiry = String(row[5] || '').trim()
-  if (expiry && !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) expiry = ''
-
-  var lowRaw = String(row[7] || '').trim()
-  var lowStockThreshold = lowRaw === '' ? null : Number(lowRaw)
+  var lowVal = valuesRow[7]
+  var lowStockThreshold =
+    lowVal === '' || lowVal == null ? null : Number(lowVal)
   if (lowStockThreshold !== null && !isFinite(lowStockThreshold)) lowStockThreshold = null
 
   return {
-    id: String(row[0] || '').trim(),
+    id: String(displayRow[0] != null ? displayRow[0] : valuesRow[0] || '').trim(),
     name: name,
-    quantity: Number(row[2]) || 0,
-    unit: String(row[3] || 'pcs').trim() || 'pcs',
-    category: String(row[4] || '').trim(),
-    expiryDate: expiry || null,
-    notes: String(row[6] || '').trim(),
+    quantity: Number(valuesRow[2]) || 0,
+    unit: String(displayRow[3] || 'pcs').trim() || 'pcs',
+    category: String(displayRow[4] || '').trim(),
+    expiryDate: parseExpiryDate(valuesRow[5], displayRow[5], timeZone),
+    notes: String(displayRow[6] || '').trim(),
     lowStockThreshold: lowStockThreshold,
-    barcode: String(row[8] || '').trim(),
-    createdAt: parseSyncTimestamp(row[9], now),
-    updatedAt: parseSyncTimestamp(row[10], now),
-    deleted: isDeletedFlag(row[11]),
+    barcode: String(displayRow[8] != null ? displayRow[8] : valuesRow[8] || '').trim(),
+    createdAt: parseSyncTimestamp(valuesRow[9], now),
+    updatedAt: parseSyncTimestamp(valuesRow[10], now),
+    deleted: isDeletedFlag(displayRow[11] != null ? displayRow[11] : valuesRow[11]),
   }
 }
 
@@ -238,13 +238,16 @@ function writeAllItems_(sheet, items) {
   if (!items.length) return
 
   var rows = items.map(itemToRow_)
-  var range = sheet.getRange(2, 1, rows.length, HEADERS.length)
-  range.setValues(rows)
+  var numRows = rows.length
 
-  // Force text format for id, expiryDate, barcode (preserve leading zeros).
-  sheet.getRange(2, TEXT_COLUMNS.id, rows.length, 1).setNumberFormat('@')
-  sheet.getRange(2, TEXT_COLUMNS.expiryDate, rows.length, 1).setNumberFormat('@')
-  sheet.getRange(2, TEXT_COLUMNS.barcode, rows.length, 1).setNumberFormat('@')
+  // Text format before setValues so dates/barcodes are not coerced.
+  sheet.getRange(2, TEXT_COLUMNS.id, numRows, 1).setNumberFormat('@')
+  sheet.getRange(2, TEXT_COLUMNS.expiryDate, numRows, 1).setNumberFormat('@')
+  sheet.getRange(2, TEXT_COLUMNS.barcode, numRows, 1).setNumberFormat('@')
+  sheet.getRange(2, 10, numRows, 1).setNumberFormat('0')
+  sheet.getRange(2, 11, numRows, 1).setNumberFormat('0')
+
+  sheet.getRange(2, 1, numRows, HEADERS.length).setValues(rows)
 }
 
 function assignBlankIds_(sheet, items) {
@@ -266,8 +269,10 @@ function assignBlankIds_(sheet, items) {
     var sheetRow = r + 2
     sheet.getRange(sheetRow, 1).setNumberFormat('@')
     sheet.getRange(sheetRow, 1).setValue(newId)
+    sheet.getRange(sheetRow, 11).setNumberFormat('0')
     sheet.getRange(sheetRow, 11).setValue(now)
     if (!String(row[9] || '').trim()) {
+      sheet.getRange(sheetRow, 10).setNumberFormat('0')
       sheet.getRange(sheetRow, 10).setValue(now)
     }
     changed = true
@@ -301,5 +306,6 @@ function onEdit(e) {
     idCell.setValue(Utilities.getUuid())
   }
 
+  sheet.getRange(row, 11).setNumberFormat('0')
   sheet.getRange(row, 11).setValue(Date.now())
 }
