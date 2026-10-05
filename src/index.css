@@ -869,6 +869,22 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
+.settings-block .field-label {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.settings-block input[type='url'],
+.settings-block input[type='text'] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
 .settings-actions {
   display: grid;
   gap: 8px;

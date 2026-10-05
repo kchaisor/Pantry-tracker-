@@ -22,7 +22,9 @@ Data stays on the device (IndexedDB, with a localStorage fallback). After the fi
 - First-run welcome + empty states
 - PWA: manifest, icons, service worker, iOS Add to Home Screen meta tags
 
-Out of scope: accounts, cloud sync, recipes, shopping lists, App Store builds.
+Optional **Google Sheet sync** keeps a shared copy for bots and other editors (see [Google Sheet sync](#google-sheet-sync)). No user accounts.
+
+Out of scope: recipes, shopping lists, App Store builds.
 
 ## Barcode scanning
 
@@ -55,6 +57,32 @@ Each item can have its own **low-stock threshold**. Leave it blank to use the de
 When you open Pantry, a banner lists items that are running low. Tap **Show** to jump to the Low filter. The same items get a **Low** pill on the card. If the Home Screen app supports it, the icon badge updates too.
 
 Pantry does **not** use Web Push. Background push is not reliable for an iPhone Home Screen PWA, and this app has no server. Alerts are in-app (banner, badges, toast when a count crosses the threshold). Settings can optionally request a local reminder when you open the app, once per day — a graceful extra, not a background notification.
+
+## Google Sheet sync
+
+Pantry can sync with a shared Google Sheet so a separate bot (or human) can read and edit the same list. The phone still keeps IndexedDB for offline use; when sync runs, the sheet and local copy merge by `updatedAt` (last write wins).
+
+### One-time setup
+
+1. Open the **Pantry Tracker** spreadsheet → **Extensions** → **Apps Script**.
+2. Create script files from this repo: paste `apps-script/Code.gs` and `apps-script/mergeLib.js` (same project).
+3. In `Code.gs`, replace `REPLACE_WITH_TOKEN` in `SYNC_TOKEN` with a long random secret.
+4. **Deploy** → **New deployment** → type **Web app**:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+5. Copy the web app URL and append `?token=YOUR_SECRET` (same value as `SYNC_TOKEN`).
+6. In Pantry **Settings** → **Sheet sync**, paste that full URL and tap **Save sync URL**. Use **Sync now** to verify.
+
+After deploy, add an `onEdit` trigger if you want sheet UI edits to bump `updatedAt` automatically: Apps Script → **Triggers** → add `onEdit` for the spreadsheet (the simple trigger in `Code.gs` runs for the editor only; an installable trigger is optional for bots).
+
+### Bots editing the sheet directly
+
+- Do **not** delete rows — set column **`deleted`** to `TRUE` (or `true`) and bump **`updatedAt`** to current epoch milliseconds.
+- On any edit, set **`updatedAt`** to `Date.now()` (or an ISO string — the app and script accept both).
+- Leave **`id`** as text; rows without an id get one assigned on the next sync.
+- Keep **`expiryDate`** as `YYYY-MM-DD` text, **`barcode`** as text (leading zeros), and **`lowStockThreshold`** blank when unused.
+
+Sync runs when you open the app, when the device goes online, when the tab becomes visible, shortly after local edits, and about once a minute while the app is open. Failures (offline, bad token, Google errors) leave local data unchanged and show an error in Settings.
 
 ## Backup and restore
 

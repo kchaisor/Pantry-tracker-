@@ -78,13 +78,22 @@ export async function saveItem(item: PantryItem): Promise<void> {
   }
 }
 
+/** Tombstone delete for sheet sync (row stays in storage with deleted=true). */
 export async function deleteItem(id: string): Promise<void> {
+  const all = await loadItems()
+  const existing = all.find((item) => item.id === id)
+  if (!existing) return
+  const tombstone: PantryItem = { ...existing, deleted: true, updatedAt: Date.now() }
+  await saveItem(tombstone)
+}
+
+export async function purgeItem(id: string): Promise<void> {
   try {
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
       tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error ?? new Error('Failed to delete item'))
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to purge item'))
       tx.objectStore(STORE_NAME).delete(id)
     })
     db.close()

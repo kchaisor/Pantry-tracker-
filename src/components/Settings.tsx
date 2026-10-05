@@ -9,11 +9,15 @@ import {
 } from '../lib/backup.ts'
 import { notificationsSupported, requestNotifyPermission } from '../lib/alerts.ts'
 import { isStandalone } from '../lib/theme.ts'
+import type { SyncState } from '../lib/sheetSync.ts'
 import type { AlertPrefs, PantryItem } from '../types.ts'
 
 interface SettingsProps {
   items: PantryItem[]
   alertPrefs: AlertPrefs
+  syncState: SyncState
+  onSaveSyncUrl: (url: string) => void
+  onSyncNow: () => void
   onAlertPrefs: (prefs: AlertPrefs) => void
   onClose: () => void
   onReplace: (items: PantryItem[]) => Promise<void>
@@ -23,6 +27,9 @@ interface SettingsProps {
 export function Settings({
   items,
   alertPrefs,
+  syncState,
+  onSaveSyncUrl,
+  onSyncNow,
   onAlertPrefs,
   onClose,
   onReplace,
@@ -38,6 +45,8 @@ export function Settings({
   )
   const [confirmReplace, setConfirmReplace] = useState(false)
   const [notifyNote, setNotifyNote] = useState<string | null>(null)
+  const [syncUrlDraft, setSyncUrlDraft] = useState(syncState.url ?? '')
+  const [syncBusy, setSyncBusy] = useState(false)
   const canNotify = notificationsSupported()
   const standalone = isStandalone()
 
@@ -153,6 +162,59 @@ export function Settings({
               Export a JSON backup to Files or iCloud Drive, and reopen the Home Screen app now and
               then so Safari keeps the data.
             </p>
+          </section>
+
+          <section className="settings-block">
+            <h3>Sheet sync</h3>
+            <p>
+              Sync this phone with the shared <strong>Pantry Tracker</strong> Google Sheet. Data stays
+              in IndexedDB for offline use; the sheet is the shared source of truth when online.
+            </p>
+            <label className="field-label" htmlFor="sync-url">
+              Web app URL (include <code>?token=...</code>)
+            </label>
+            <input
+              id="sync-url"
+              className="text-input settings-wide"
+              type="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://script.google.com/macros/s/…/exec?token=…"
+              value={syncUrlDraft}
+              onChange={(event) => setSyncUrlDraft(event.target.value)}
+            />
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={!syncUrlDraft.trim()}
+                onClick={() => onSaveSyncUrl(syncUrlDraft.trim())}
+              >
+                Save sync URL
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={!syncState.url || syncBusy}
+                onClick={() => {
+                  setSyncBusy(true)
+                  onSyncNow()
+                  window.setTimeout(() => setSyncBusy(false), 800)
+                }}
+              >
+                Sync now
+              </button>
+            </div>
+            {syncState.lastSyncedAt ? (
+              <p className="form-hint">
+                Last synced {new Date(syncState.lastSyncedAt).toLocaleString()}.
+              </p>
+            ) : syncState.url ? (
+              <p className="form-hint">Not synced yet.</p>
+            ) : null}
+            {syncState.lastError ? (
+              <p className="form-error">{syncState.lastError}</p>
+            ) : null}
           </section>
 
           <section className="settings-block">

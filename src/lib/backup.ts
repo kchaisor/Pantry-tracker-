@@ -50,7 +50,14 @@ export function normalizeItem(raw: unknown, now = Date.now()): PantryItem | null
     expiryDate = expiryRaw
   }
 
-  return {
+  const deletedRaw = row.deleted
+  const deleted =
+    deletedRaw === true ||
+    deletedRaw === 1 ||
+    (typeof deletedRaw === 'string' &&
+      ['true', '1', 'yes'].includes(deletedRaw.trim().toLowerCase()))
+
+  const item: PantryItem = {
     id: asString(row.id).trim() || newId(),
     name,
     quantity: asQuantity(row.quantity),
@@ -63,6 +70,8 @@ export function normalizeItem(raw: unknown, now = Date.now()): PantryItem | null
     createdAt: asTimestamp(row.createdAt, now),
     updatedAt: asTimestamp(row.updatedAt, now),
   }
+  if (deleted) item.deleted = true
+  return item
 }
 
 export function parseBackup(json: string): { items: PantryItem[]; exportedAt: string | null } {
