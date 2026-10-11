@@ -14,7 +14,7 @@ var SYNC_TOKEN = 'REPLACE_WITH_TOKEN'
 
 var SHEET_TAB = 'Items'
 
-var HEADERS = [
+var BASE_HEADERS = [
   'id',
   'name',
   'quantity',
@@ -29,7 +29,10 @@ var HEADERS = [
   'deleted',
 ]
 
-var TEXT_COLUMNS = { id: 1, expiryDate: 6, barcode: 9 }
+var BRAND_HEADER = 'brand'
+var HEADERS = BASE_HEADERS.concat([BRAND_HEADER])
+
+var TEXT_COLUMNS = { id: 1, expiryDate: 6, barcode: 9, brand: 13 }
 
 function doGet(e) {
   return handleRequest_(e, null)
@@ -103,14 +106,17 @@ function syncPost_(payload) {
     assignBlankIds_(sheet, sheetItems)
     sheetItems = readAllItems_(sheet)
 
-    var incomingList = []
+    var incomingPairs = []
     if (payload && Array.isArray(payload.items)) {
-      incomingList = payload.items.map(normalizeIncoming_).filter(function (item) {
-        return item && item.id
-      })
+      for (var i = 0; i < payload.items.length; i++) {
+        var raw = payload.items[i]
+        var normalized = normalizeIncoming_(raw)
+        if (!normalized || !normalized.item || !normalized.item.id) continue
+        incomingPairs.push(normalized)
+      }
     }
 
-    var merged = mergeSyncItems(sheetItems, incomingList)
+    var merged = mergePostItems(sheetItems, incomingPairs)
     writeAllItems_(sheet, merged)
     return merged
   } finally {
@@ -119,11 +125,22 @@ function syncPost_(payload) {
 }
 
 function ensureHeader_(sheet) {
-  var first = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0]
-  var needsHeader = first.join('|') !== HEADERS.join('|')
-  if (needsHeader) {
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
-    sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold')
+  var baseRow = sheet.getRange(1, 1, 1, BASE_HEADERS.length).getValues()[0]
+  var baseOk = true
+  for (var i = 0; i < BASE_HEADERS.length; i++) {
+    if (String(baseRow[i] || '').trim() !== BASE_HEADERS[i]) {
+      baseOk = false
+      break
+    }
+  }
+  if (!baseOk) {
+    sheet.getRange(1, 1, 1, BASE_HEADERS.length).setValues([BASE_HEADERS])
+    sheet.getRange(1, 1, 1, BASE_HEADERS.length).setFontWeight('bold')
+  }
+  var brandCell = sheet.getRange(1, HEADERS.length)
+  if (String(brandCell.getDisplayValue()).trim() !== BRAND_HEADER) {
+    brandCell.setValue(BRAND_HEADER)
+    brandCell.setFontWeight('bold')
   }
 }
 
@@ -178,6 +195,7 @@ function rowToItem_(valuesRow, displayRow, timeZone) {
     createdAt: parseSyncTimestamp(valuesRow[9], now),
     updatedAt: parseSyncTimestamp(valuesRow[10], now),
     deleted: isDeletedFlag(displayRow[11] != null ? displayRow[11] : valuesRow[11]),
+    brand: String(displayRow[12] != null ? displayRow[12] : valuesRow[12] || '').trim(),
   }
 }
 
@@ -195,19 +213,26 @@ function normalizeIncoming_(raw) {
   var lowStockThreshold = low == null || low === '' ? null : Number(low)
   if (lowStockThreshold !== null && !isFinite(lowStockThreshold)) lowStockThreshold = null
 
+  var hadBrand = Object.prototype.hasOwnProperty.call(raw, 'brand')
+  var brand = hadBrand ? String(raw.brand || '').trim() : ''
+
   return {
-    id: String(raw.id || '').trim(),
-    name: name,
-    quantity: Number(raw.quantity) || 0,
-    unit: String(raw.unit || 'pcs').trim() || 'pcs',
-    category: String(raw.category || '').trim(),
-    expiryDate: expiryStr,
-    notes: String(raw.notes || '').trim(),
-    lowStockThreshold: lowStockThreshold,
-    barcode: String(raw.barcode || '').trim(),
-    createdAt: parseSyncTimestamp(raw.createdAt, now),
-    updatedAt: parseSyncTimestamp(raw.updatedAt, now),
-    deleted: isDeletedFlag(raw.deleted),
+    hadBrand: hadBrand,
+    item: {
+      id: String(raw.id || '').trim(),
+      name: name,
+      quantity: Number(raw.quantity) || 0,
+      unit: String(raw.unit || 'pcs').trim() || 'pcs',
+      category: String(raw.category || '').trim(),
+      expiryDate: expiryStr,
+      notes: String(raw.notes || '').trim(),
+      lowStockThreshold: lowStockThreshold,
+      barcode: String(raw.barcode || '').trim(),
+      createdAt: parseSyncTimestamp(raw.createdAt, now),
+      updatedAt: parseSyncTimestamp(raw.updatedAt, now),
+      deleted: isDeletedFlag(raw.deleted),
+      brand: brand,
+    },
   }
 }
 
@@ -225,6 +250,7 @@ function itemToRow_(item) {
     parseSyncTimestamp(item.createdAt, Date.now()),
     parseSyncTimestamp(item.updatedAt, Date.now()),
     item.deleted ? 'TRUE' : '',
+    item.brand != null ? String(item.brand) : '',
   ]
 }
 
@@ -244,6 +270,7 @@ function writeAllItems_(sheet, items) {
   sheet.getRange(2, TEXT_COLUMNS.id, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, TEXT_COLUMNS.expiryDate, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, TEXT_COLUMNS.barcode, numRows, 1).setNumberFormat('@')
+  sheet.getRange(2, TEXT_COLUMNS.brand, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, 10, numRows, 1).setNumberFormat('0')
   sheet.getRange(2, 11, numRows, 1).setNumberFormat('0')
 

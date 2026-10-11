@@ -1,13 +1,19 @@
 import { CATEGORIES } from '../constants.ts'
 import { normalizeBarcode } from './barcode.ts'
-import type { Category } from '../types.ts'
+import { volumeFromProductFields } from './productVolume.ts'
+import type { Category, ItemDraft } from '../types.ts'
 
 export interface ProductLookup {
   name: string
   category: string
+  brand: string
+  isLiquid: boolean
+  volumeMl: number | null
+  volumeUnknown: boolean
 }
 
-const OFF_FIELDS = 'product_name,product_name_en,generic_name,brands,categories_tags'
+const OFF_FIELDS =
+  'product_name,product_name_en,generic_name,brands,categories_tags,quantity,product_quantity,product_quantity_unit'
 const LOOKUP_MS = 4500
 
 const CATEGORY_HINTS: { tag: string; category: Category }[] = [
@@ -28,6 +34,9 @@ const CATEGORY_HINTS: { tag: string; category: Category }[] = [
   { tag: 'en:condiments', category: 'Condiments' },
   { tag: 'en:sauces', category: 'Condiments' },
   { tag: 'en:spices', category: 'Spices' },
+  { tag: 'en:olive-oils', category: 'Pantry' },
+  { tag: 'en:vegetable-oils', category: 'Pantry' },
+  { tag: 'en:oils', category: 'Pantry' },
   { tag: 'en:groceries', category: 'Pantry' },
   { tag: 'en:plant-based-foods-and-beverages', category: 'Produce' },
   { tag: 'en:fruits', category: 'Produce' },
@@ -58,6 +67,47 @@ function clipName(name: string): string {
   return compact.slice(0, 80).trim()
 }
 
+export function primaryBrand(raw: string): string {
+  const first = raw.split(',')[0]?.trim() ?? ''
+  if (!first) return ''
+  return first.length <= 40 ? first : first.slice(0, 40).trim()
+}
+
+export function productFromOff(product: Record<string, unknown>): ProductLookup | null {
+  const name = clipName(firstName(product))
+  if (!name) return null
+  const brand = primaryBrand(typeof product.brands === 'string' ? product.brands : '')
+  const category = mapCategory(product.categories_tags)
+  const allowed = CATEGORIES.includes(category as Category) ? category : ''
+  const quantityText = typeof product.quantity === 'string' ? product.quantity : ''
+  const volume = volumeFromProductFields(
+    quantityText,
+    product.product_quantity,
+    product.product_quantity_unit,
+  )
+  return {
+    name,
+    category: allowed,
+    brand,
+    isLiquid: volume.isLiquid,
+    volumeMl: volume.volumeMl,
+    volumeUnknown: volume.isLiquid && volume.volumeMl == null,
+  }
+}
+
+/** Fill empty draft fields after a barcode catalog hit (never overwrite typed values). */
+export function applyLookupToDraft(draft: ItemDraft, found: ProductLookup): ItemDraft {
+  const next: ItemDraft = { ...draft }
+  if (!next.name.trim()) next.name = found.name
+  if (!next.category.trim()) next.category = found.category
+  if (!next.brand.trim()) next.brand = found.brand
+  if (found.isLiquid && found.volumeMl != null) {
+    next.quantity = found.volumeMl
+    next.unit = 'ml'
+  }
+  return next
+}
+
 /**
  * Best-effort public UPC/EAN name lookup. Fails open: network, CORS, or
  * unknown codes just return null so Kelvin can type the name.
@@ -81,11 +131,7 @@ export async function lookupProduct(barcode: string): Promise<ProductLookup | nu
       product?: Record<string, unknown>
     }
     if (body.status !== 1 || !body.product) return null
-    const name = clipName(firstName(body.product))
-    if (!name) return null
-    const category = mapCategory(body.product.categories_tags)
-    const allowed = CATEGORIES.includes(category as Category) ? category : ''
-    return { name, category: allowed }
+    return productFromOff(body.product)
   } catch {
     return null
   } finally {

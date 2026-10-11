@@ -2,7 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { CATEGORIES, DEFAULT_LOW_STOCK_THRESHOLD, UNITS } from '../constants.ts'
 import { draftFromItem, emptyDraft } from '../hooks/usePantry.ts'
 import { findBarcodeMatch, normalizeBarcode } from '../lib/barcode.ts'
-import { findNameMatch, formatQuantity } from '../lib/query.ts'
+import { addDaysIso } from '../lib/dates.ts'
+import { findNameMatch, formatQuantity, uniqueBrands } from '../lib/query.ts'
+import { unitLabel } from '../lib/units.ts'
 import { parseThreshold } from '../lib/stock.ts'
 import type { ItemDraft, PantryItem, RecentItem } from '../types.ts'
 
@@ -16,6 +18,10 @@ interface ItemEditorProps {
   initialDraft?: ItemDraft
   incomingBarcode?: string | null
   lookupStatus?: 'idle' | 'loading' | 'found' | 'miss'
+  highlightExpiry?: boolean
+  volumeMissingHint?: boolean
+  gs1ExpiryApplied?: boolean
+  onDismissScanHints?: () => void
   onScanBarcode?: () => void
   onClose: () => void
   onSave: (draft: ItemDraft) => Promise<void>
@@ -32,13 +38,19 @@ export function ItemEditor({
   initialDraft,
   incomingBarcode,
   lookupStatus = 'idle',
+  highlightExpiry = false,
+  volumeMissingHint = false,
+  gs1ExpiryApplied = false,
+  onDismissScanHints,
   onScanBarcode,
   onClose,
   onSave,
   onDelete,
 }: ItemEditorProps) {
   const titleId = useId()
+  const brandListId = useId()
   const nameRef = useRef<HTMLInputElement>(null)
+  const expiryRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<ItemDraft>(() =>
     item
       ? draftFromItem(item)
@@ -81,6 +93,24 @@ export function ItemEditor({
         next.category = initialDraft.category
         changed = true
       }
+      if (!current.brand.trim() && initialDraft.brand.trim()) {
+        next.brand = initialDraft.brand
+        changed = true
+      }
+      if (!current.expiryDate && initialDraft.expiryDate) {
+        next.expiryDate = initialDraft.expiryDate
+        changed = true
+      }
+      if (initialDraft.unit === 'ml' && initialDraft.quantity > 0) {
+        if (current.quantity <= 1 && initialDraft.quantity !== current.quantity) {
+          next.quantity = initialDraft.quantity
+          changed = true
+        }
+        if (current.unit !== 'ml') {
+          next.unit = 'ml'
+          changed = true
+        }
+      }
       return changed ? next : current
     })
     if (initialDraft.category && !CATEGORIES.includes(initialDraft.category as (typeof CATEGORIES)[number])) {
@@ -89,7 +119,8 @@ export function ItemEditor({
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => nameRef.current?.focus(), 80)
+    const focusTarget = !item && highlightExpiry ? expiryRef.current : nameRef.current
+    const timer = window.setTimeout(() => focusTarget?.focus(), 80)
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -98,9 +129,11 @@ export function ItemEditor({
       window.clearTimeout(timer)
       window.removeEventListener('keydown', onKey)
     }
-  }, [onClose])
+  }, [onClose, highlightExpiry, item])
 
   const categoryValue = customCategory || draft.category
+
+  const brandSuggestions = useMemo(() => uniqueBrands(items), [items])
 
   const categoryOptions = useMemo(() => {
     const extras = extraCategories.filter(
@@ -125,6 +158,7 @@ export function ItemEditor({
     setDraft((current) => ({
       ...current,
       name: recent.name,
+      brand: recent.brand || current.brand,
       unit: recent.unit || current.unit,
       category: recent.category,
       quantity: current.quantity || 1,
@@ -149,6 +183,7 @@ export function ItemEditor({
       await onSave({
         ...draft,
         barcode: normalizeBarcode(draft.barcode),
+        brand: draft.brand.trim(),
         category: categoryValue.trim(),
         quantity: Number(draft.quantity),
         lowStockThreshold: parseThreshold(thresholdText),
@@ -193,6 +228,25 @@ export function ItemEditor({
               maxLength={80}
             />
           </label>
+
+          <label>
+            Brand
+            <input
+              value={draft.brand}
+              onChange={(event) => setField('brand', event.target.value)}
+              placeholder="Optional"
+              list={brandSuggestions.length > 0 ? brandListId : undefined}
+              autoComplete="off"
+              maxLength={40}
+            />
+          </label>
+          {brandSuggestions.length > 0 ? (
+            <datalist id={brandListId}>
+              {brandSuggestions.map((brand) => (
+                <option key={brand} value={brand} />
+              ))}
+            </datalist>
+          ) : null}
 
           {!item && recents.length > 0 ? (
             <div className="chips wrap" aria-label="Recent items">
@@ -244,6 +298,10 @@ export function ItemEditor({
             </p>
           ) : null}
 
+          {volumeMissingHint ? (
+            <p className="form-hint form-flag">Volume not found — enter mL.</p>
+          ) : null}
+
           <div className="field-row">
             <label>
               Quantity
@@ -261,7 +319,7 @@ export function ItemEditor({
               <select value={draft.unit} onChange={(event) => setField('unit', event.target.value)}>
                 {UNITS.map((unit) => (
                   <option key={unit} value={unit}>
-                    {unit}
+                    {unitLabel(unit)}
                   </option>
                 ))}
                 {draft.unit && !UNITS.includes(draft.unit as (typeof UNITS)[number]) ? (
@@ -327,14 +385,48 @@ export function ItemEditor({
             {DEFAULT_LOW_STOCK_THRESHOLD}. Set 0 to skip the low badge (Out still shows at 0).
           </p>
 
-          <label>
-            Expiry date
-            <input
-              type="date"
-              value={draft.expiryDate}
-              onChange={(event) => setField('expiryDate', event.target.value)}
-            />
-          </label>
+          <div
+            className={`expiry-block ${highlightExpiry ? 'expiry-block--scan' : ''}`}
+            data-scan-expiry={highlightExpiry ? 'true' : undefined}
+          >
+            <label>
+              Expiry / best before
+              <input
+                ref={expiryRef}
+                type="date"
+                value={draft.expiryDate}
+                onChange={(event) => {
+                  setField('expiryDate', event.target.value)
+                  onDismissScanHints?.()
+                }}
+              />
+            </label>
+            {gs1ExpiryApplied && draft.expiryDate ? (
+              <p className="form-hint">Expiry from GS1 barcode (AI 17).</p>
+            ) : highlightExpiry ? (
+              <p className="form-hint">Plain barcodes do not include expiry — pick a date.</p>
+            ) : null}
+            <div className="chips wrap" aria-label="Expiry shortcuts">
+              {[
+                { label: '+1 wk', days: 7 },
+                { label: '+1 mo', days: 30 },
+                { label: '+3 mo', days: 90 },
+              ].map((shortcut) => (
+                <button
+                  key={shortcut.label}
+                  type="button"
+                  className="chip"
+                  onClick={() => {
+                    setField('expiryDate', addDaysIso(shortcut.days))
+                    onDismissScanHints?.()
+                    expiryRef.current?.focus()
+                  }}
+                >
+                  {shortcut.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <label>
             Notes
@@ -342,7 +434,7 @@ export function ItemEditor({
               rows={3}
               value={draft.notes}
               onChange={(event) => setField('notes', event.target.value)}
-              placeholder="Opened, location, brand…"
+              placeholder="Opened, location…"
               maxLength={240}
             />
           </label>

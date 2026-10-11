@@ -36,6 +36,8 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 export interface PantryItem {
   id: string
   name: string
+  /** Maker / label brand; empty string when unknown. */
+  brand: string
   quantity: number
   unit: string
   category: string
@@ -53,6 +55,7 @@ export interface PantryItem {
 
 export interface ItemDraft {
   name: string
+  brand: string
   quantity: number
   unit: string
   category: string
@@ -66,6 +69,7 @@ export type ItemTone = 'ok' | 'soon' | 'expired' | 'empty' | 'low'
 
 export interface RecentItem {
   name: string
+  brand: string
   unit: string
   category: string
 }

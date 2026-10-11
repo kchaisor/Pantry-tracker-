@@ -751,6 +751,35 @@ textarea:focus-visible {
   line-height: 1.4;
 }
 
+.form-flag {
+  color: var(--amber);
+  font-weight: 650;
+}
+
+.expiry-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin: 0 -4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.expiry-block--scan {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  box-shadow: 0 0 0 1px rgba(154, 107, 18, 0.12);
+}
+
+.card-brand {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.card-subline {
+  margin: 0;
+}
+
 .quick-add {
   padding: 0 18px 10px;
   display: grid;

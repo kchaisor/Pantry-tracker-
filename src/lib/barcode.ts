@@ -1,3 +1,4 @@
+import { parseGs1Barcode } from './gs1Barcode.ts'
 import type { PantryItem } from '../types.ts'
 
 const DIGITS = /^\d+$/
@@ -29,7 +30,9 @@ export function findBarcodeMatch(
 }
 
 export function isPlausibleBarcode(raw: string): boolean {
-  const value = normalizeBarcode(raw)
+  const trimmed = raw.trim()
+  if (parseGs1Barcode(trimmed)) return true
+  const value = normalizeBarcode(trimmed)
   return /^[0-9A-Za-z]{6,20}$/.test(value)
 }
 

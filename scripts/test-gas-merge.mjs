@@ -12,16 +12,17 @@ const source = readFileSync(join(dir, '../apps-script/mergeLib.js'), 'utf8').rep
 const sandbox = {}
 const fn = new Function(
   'sandbox',
-  `${source}\nsandbox.mergeSyncItems = mergeSyncItems; sandbox.parseSyncTimestamp = parseSyncTimestamp; sandbox.parseExpiryDate = parseExpiryDate;`,
+  `${source}\nsandbox.mergeSyncItems = mergeSyncItems; sandbox.mergePostItems = mergePostItems; sandbox.parseSyncTimestamp = parseSyncTimestamp; sandbox.parseExpiryDate = parseExpiryDate;`,
 )
 fn(sandbox)
 
-const { mergeSyncItems, parseSyncTimestamp, parseExpiryDate } = sandbox
+const { mergeSyncItems, mergePostItems, parseSyncTimestamp, parseExpiryDate } = sandbox
 
 const a = [
   {
     id: 'x',
     name: 'Old',
+    brand: 'KeepMe',
     quantity: 1,
     unit: 'pcs',
     category: '',
@@ -39,6 +40,7 @@ const b = [
   {
     id: 'x',
     name: 'New',
+    brand: '',
     quantity: 2,
     unit: 'pcs',
     category: '',
@@ -55,6 +57,12 @@ const b = [
 const merged = mergeSyncItems(a, b)
 assert.equal(merged.length, 1)
 assert.equal(merged[0].name, 'New')
+
+const postMerged = mergePostItems(a, [{ hadBrand: false, item: b[0] }])
+assert.equal(postMerged[0].brand, 'KeepMe')
+
+const postWithBrand = mergePostItems(a, [{ hadBrand: true, item: { ...b[0], brand: 'Posted' } }])
+assert.equal(postWithBrand[0].brand, 'Posted')
 
 // #1: null rows from blank-name sheet lines must not crash merge
 const withNull = mergeSyncItems([null, a[0]], b)

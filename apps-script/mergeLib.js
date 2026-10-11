@@ -67,6 +67,45 @@ function mergeSyncItems(a, b) {
   })
 }
 
+/**
+ * POST merge: when the live app omits `brand` on an item, keep the sheet brand if incoming wins.
+ * incomingPairs: { item, hadBrand }[]
+ */
+function mergePostItems(sheetItems, incomingPairs) {
+  var sheetMap = {}
+  for (var i = 0; i < sheetItems.length; i++) {
+    sheetMap[sheetItems[i].id] = sheetItems[i]
+  }
+  var incomingItems = incomingPairs.map(function (p) {
+    return p.item
+  })
+  var merged = mergeSyncItems(sheetItems, incomingItems)
+  for (var j = 0; j < merged.length; j++) {
+    var id = merged[j].id
+    var pair = null
+    for (var k = 0; k < incomingPairs.length; k++) {
+      if (incomingPairs[k].item.id === id) {
+        pair = incomingPairs[k]
+        break
+      }
+    }
+    var sheet = sheetMap[id]
+    if (!pair || pair.hadBrand || !sheet) continue
+    var incTs = parseSyncTimestamp(pair.item.updatedAt)
+    var sheetTs = parseSyncTimestamp(sheet.updatedAt)
+    if (incTs >= sheetTs) {
+      merged[j].brand = sheet.brand || ''
+    }
+  }
+  return merged
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseSyncTimestamp, parseExpiryDate, isDeletedFlag, mergeSyncItems }
+  module.exports = {
+    parseSyncTimestamp,
+    parseExpiryDate,
+    isDeletedFlag,
+    mergeSyncItems,
+    mergePostItems,
+  }
 }

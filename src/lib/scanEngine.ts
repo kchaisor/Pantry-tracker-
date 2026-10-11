@@ -1,4 +1,5 @@
 import { isPlausibleBarcode, normalizeBarcode } from './barcode.ts'
+import { parseGs1Barcode } from './gs1Barcode.ts'
 
 export type CameraFacing = 'environment' | 'user'
 export type CameraPermission = 'granted' | 'denied' | 'prompt' | 'unknown'
@@ -31,6 +32,8 @@ const PRODUCT_FORMATS = [
   'code_128',
   'code_39',
   'itf',
+  'qr_code',
+  'data_matrix',
 ] as const
 
 let nativeDetector: BarcodeDetectorLike | null | undefined
@@ -171,6 +174,8 @@ async function getZxingReader() {
     BarcodeFormat.CODE_128,
     BarcodeFormat.CODE_39,
     BarcodeFormat.ITF,
+    BarcodeFormat.QR_CODE,
+    BarcodeFormat.DATA_MATRIX,
   ])
   hints.set(DecodeHintType.TRY_HARDER, true)
   zxingReader = new BrowserMultiFormatReader(hints)
@@ -179,8 +184,10 @@ async function getZxingReader() {
 
 function acceptRaw(raw: string | undefined): string | null {
   if (!raw) return null
-  const normalized = normalizeBarcode(raw)
-  return isPlausibleBarcode(normalized) ? normalized : null
+  const trimmed = raw.trim()
+  if (parseGs1Barcode(trimmed)) return trimmed
+  const normalized = normalizeBarcode(trimmed)
+  return isPlausibleBarcode(normalized) ? trimmed : null
 }
 
 function grabFrame(
