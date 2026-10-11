@@ -34,12 +34,13 @@ const CATEGORY_HINTS: { tag: string; category: Category }[] = [
   { tag: 'en:condiments', category: 'Condiments' },
   { tag: 'en:sauces', category: 'Condiments' },
   { tag: 'en:spices', category: 'Spices' },
+  { tag: 'en:olive-oils', category: 'Pantry' },
+  { tag: 'en:vegetable-oils', category: 'Pantry' },
+  { tag: 'en:oils', category: 'Pantry' },
   { tag: 'en:groceries', category: 'Pantry' },
   { tag: 'en:plant-based-foods-and-beverages', category: 'Produce' },
   { tag: 'en:fruits', category: 'Produce' },
   { tag: 'en:vegetables', category: 'Produce' },
-  { tag: 'en:olive-oils', category: 'Pantry' },
-  { tag: 'en:vegetable-oils', category: 'Pantry' },
 ]
 
 function firstName(product: Record<string, unknown>): string {
