@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarcodeScanner } from './components/BarcodeScanner.tsx'
 import { EmptyState } from './components/EmptyState.tsx'
 import { Header } from './components/Header.tsx'
@@ -15,8 +15,9 @@ import { CATEGORIES, DEFAULT_UNIT, INSTALL_HINT_KEY, WELCOME_KEY } from './const
 import { emptyDraft, usePantry } from './hooks/usePantry.ts'
 import { useSheetSync } from './hooks/useSheetSync.ts'
 import { maybeLocalNotify, syncAppBadge } from './lib/alerts.ts'
-import { findBarcodeMatch, normalizeBarcode } from './lib/barcode.ts'
-import { lookupProduct } from './lib/productLookup.ts'
+import { findBarcodeMatch } from './lib/barcode.ts'
+import { parseScannedCode } from './lib/gs1Barcode.ts'
+import { applyLookupToDraft, lookupProduct, type ProductLookup } from './lib/productLookup.ts'
 import { filterAndSort, formatQuantity, uniqueCategories } from './lib/query.ts'
 import {
   dismissBanner,
@@ -65,6 +66,11 @@ export default function App() {
   const [editorId, setEditorId] = useState<string | 'new' | null>(null)
   const [editorSeed, setEditorSeed] = useState<ItemDraft | null>(null)
   const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'found' | 'miss'>('idle')
+  const [scanHints, setScanHints] = useState({
+    highlightExpiry: false,
+    volumeMissingHint: false,
+    gs1ExpiryApplied: false,
+  })
   const [incomingBarcode, setIncomingBarcode] = useState<string | null>(null)
   const [scannerMode, setScannerMode] = useState<'lookup' | 'attach' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -77,6 +83,7 @@ export default function App() {
   const [alertPrefs, setAlertPrefs] = useState<AlertPrefs>(() => readAlertPrefs())
   const [bannerHiddenKey, setBannerHiddenKey] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const scanDemoRan = useRef(false)
 
   const lowItems = useMemo(() => lowStockItems(pantry.items), [pantry.items])
   const bannerKey = useMemo(() => lowStockKey(pantry.items), [pantry.items])
@@ -172,6 +179,7 @@ export default function App() {
   const quickAddName = async (name: string) => {
     const result = await pantry.addItem({
       name,
+      brand: '',
       quantity: 1,
       unit: lastAdd?.unit || DEFAULT_UNIT,
       category: lastAdd?.category || '',
@@ -215,12 +223,14 @@ export default function App() {
     setEditorSeed(null)
     setLookupStatus('idle')
     setIncomingBarcode(null)
+    setScanHints({ highlightExpiry: false, volumeMissingHint: false, gs1ExpiryApplied: false })
   }
 
   const openNew = (seed?: ItemDraft) => {
     setEditorSeed(seed ?? null)
     setLookupStatus('idle')
     setIncomingBarcode(null)
+    setScanHints({ highlightExpiry: false, volumeMissingHint: false, gs1ExpiryApplied: false })
     setEditorId('new')
   }
 
@@ -231,8 +241,25 @@ export default function App() {
     setEditorId(id)
   }
 
+  const prefillFromLookup = async (code: string, seed: ItemDraft, gs1Expiry: boolean) => {
+    setLookupStatus('loading')
+    const found = await lookupProduct(code)
+    setEditorSeed((current) => {
+      if (!current || current.barcode !== code) return current
+      if (!found) return current
+      return applyLookupToDraft(current, found)
+    })
+    setScanHints((hints) => ({
+      highlightExpiry: gs1Expiry ? false : hints.highlightExpiry || !seed.expiryDate,
+      volumeMissingHint: Boolean(found?.volumeUnknown),
+      gs1ExpiryApplied: gs1Expiry && Boolean(seed.expiryDate),
+    }))
+    setLookupStatus(found?.name ? 'found' : 'miss')
+  }
+
   const onScannedBarcode = async (raw: string) => {
-    const code = normalizeBarcode(raw)
+    const parsed = parseScannedCode(raw)
+    const code = parsed.barcode
     const mode = scannerMode
     setScannerMode(null)
     if (!code) return
@@ -259,21 +286,57 @@ export default function App() {
     const seed: ItemDraft = {
       ...emptyDraft(lastAdd),
       barcode: code,
+      expiryDate: parsed.expiryDate ?? '',
     }
+    const gs1Expiry = Boolean(parsed.expiryDate)
     openNew(seed)
-    setLookupStatus('loading')
-    const found = await lookupProduct(code)
-    setEditorSeed((current) => {
-      if (!current || current.barcode !== code) return current
-      if (current.name.trim()) return current
-      return {
-        ...current,
-        name: found?.name ?? current.name,
-        category: current.category || found?.category || '',
-      }
+    setScanHints({
+      highlightExpiry: !gs1Expiry,
+      volumeMissingHint: false,
+      gs1ExpiryApplied: gs1Expiry,
     })
-    setLookupStatus(found?.name ? 'found' : 'miss')
+    await prefillFromLookup(code, seed, gs1Expiry)
   }
+
+  useEffect(() => {
+    if (!pantry.ready || scanDemoRan.current) return
+    const demo = new URLSearchParams(window.location.search).get('scanDemo')
+    if (!demo) return
+    scanDemoRan.current = true
+
+    const run = async () => {
+      if (demo === 'gs1-expiry') {
+        await onScannedBarcode('(01)08410660098804(17)251231')
+        return
+      }
+      if (demo === 'olive-oil') {
+        await onScannedBarcode('8410660098804')
+        return
+      }
+      if (demo === 'volume-miss') {
+        const code = '7935737788880'
+        const seed: ItemDraft = { ...emptyDraft(lastAdd), barcode: code }
+        openNew(seed)
+        const stub: ProductLookup = {
+          name: 'Fish sauce',
+          brand: 'Three Crabs',
+          category: 'Condiments',
+          isLiquid: true,
+          volumeMl: null,
+          volumeUnknown: true,
+        }
+        setEditorSeed(applyLookupToDraft(seed, stub))
+        setScanHints({
+          highlightExpiry: true,
+          volumeMissingHint: true,
+          gs1ExpiryApplied: false,
+        })
+        setLookupStatus('found')
+        return
+      }
+    }
+    void run()
+  }, [pantry.ready, lastAdd])
 
   const filteredEmpty = pantry.items.length > 0 && visible.length === 0
   const showQuickAdd = pantry.ready && !pantry.error && (pantry.items.length > 0 || recents.length > 0)
@@ -399,6 +462,12 @@ export default function App() {
           initialDraft={editorSeed ?? undefined}
           incomingBarcode={incomingBarcode}
           lookupStatus={lookupStatus}
+          highlightExpiry={scanHints.highlightExpiry}
+          volumeMissingHint={scanHints.volumeMissingHint}
+          gs1ExpiryApplied={scanHints.gs1ExpiryApplied}
+          onDismissScanHints={() =>
+            setScanHints((hints) => ({ ...hints, highlightExpiry: false }))
+          }
           onScanBarcode={() => setScannerMode('attach')}
           onClose={closeEditor}
           onSave={saveDraft}

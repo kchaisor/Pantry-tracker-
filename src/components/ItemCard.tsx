@@ -1,5 +1,6 @@
 import { expiryLabel, itemTone } from '../lib/dates.ts'
 import { formatQuantity } from '../lib/query.ts'
+import { unitLabel } from '../lib/units.ts'
 import { effectiveThreshold } from '../lib/stock.ts'
 import type { PantryItem } from '../types.ts'
 
@@ -27,7 +28,9 @@ export function ItemCard({ item, onOpen, onAdjust, onEmpty }: ItemCardProps) {
       <button type="button" className="card-main" onClick={onOpen}>
         <div className="card-copy">
           <h2>{item.name}</h2>
-          <p>
+          <p className="card-subline">
+            {item.brand ? <span className="card-brand">{item.brand}</span> : null}
+            {item.brand ? ' · ' : ''}
             {item.category || 'Uncategorized'}
             {expiry ? ` · ${expiry}` : ''}
             {tone === 'low' && threshold > 0 ? ` · alert at ${threshold}` : ''}
@@ -50,7 +53,7 @@ export function ItemCard({ item, onOpen, onAdjust, onEmpty }: ItemCardProps) {
           </button>
           <span className="stepper-value">
             {formatQuantity(item.quantity)}
-            <small>{item.unit}</small>
+            <small>{unitLabel(item.unit)}</small>
           </span>
           <button
             type="button"

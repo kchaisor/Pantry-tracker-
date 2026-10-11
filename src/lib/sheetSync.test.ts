@@ -8,6 +8,7 @@ function syncItem(partial: Partial<SyncItem> & { id: string; name: string }): Sy
   return {
     id: partial.id,
     name: partial.name,
+    brand: partial.brand ?? '',
     quantity: partial.quantity ?? 1,
     unit: partial.unit ?? 'pcs',
     category: partial.category ?? '',

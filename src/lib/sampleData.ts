@@ -3,8 +3,9 @@ import { normalizeItem } from './backup.ts'
 import type { PantryItem } from '../types.ts'
 
 function item(
-  partial: Omit<PantryItem, 'id' | 'createdAt' | 'updatedAt' | 'lowStockThreshold' | 'barcode'> & {
+  partial: Omit<PantryItem, 'id' | 'createdAt' | 'updatedAt' | 'lowStockThreshold' | 'barcode' | 'brand'> & {
     id: string
+    brand?: string
     daysAgo?: number
     lowStockThreshold?: number | null
     barcode?: string
@@ -14,6 +15,7 @@ function item(
   return {
     id: partial.id,
     name: partial.name,
+    brand: partial.brand ?? '',
     quantity: partial.quantity,
     unit: partial.unit,
     category: partial.category,

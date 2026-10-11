@@ -3,6 +3,13 @@ import { isExpiringConcern } from './dates.ts'
 import { isLowStock } from './stock.ts'
 import type { PantryItem, SortMode, StockFilter } from '../types.ts'
 
+export function uniqueBrands(items: PantryItem[]): string[] {
+  const brands = new Set(
+    items.map((item) => item.brand.trim()).filter((brand) => brand.length > 0),
+  )
+  return Array.from(brands).sort((a, b) => a.localeCompare(b))
+}
+
 export function uniqueCategories(items: PantryItem[], defaults: readonly string[]): string[] {
   const used = new Set(
     items.map((item) => item.category.trim()).filter((category) => category.length > 0),
@@ -28,6 +35,7 @@ export function filterAndSort(
     if (
       needle &&
       !item.name.toLowerCase().includes(needle) &&
+      !(item.brand || '').toLowerCase().includes(needle) &&
       !barcodeSearchHaystack(item.barcode).includes(needle.replace(/[\s-]/g, ''))
     ) {
       return false

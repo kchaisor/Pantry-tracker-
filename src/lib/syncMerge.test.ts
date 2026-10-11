@@ -6,6 +6,7 @@ function item(partial: Partial<SyncItem> & { id: string; name: string }): SyncIt
   return {
     id: partial.id,
     name: partial.name,
+    brand: partial.brand ?? '',
     quantity: partial.quantity ?? 1,
     unit: partial.unit ?? 'pcs',
     category: partial.category ?? '',

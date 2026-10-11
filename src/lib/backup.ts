@@ -2,6 +2,7 @@ import { APP_NAME } from '../constants.ts'
 import type { BackupFile, PantryItem } from '../types.ts'
 import { normalizeBarcode } from './barcode.ts'
 import { clampQuantity } from './query.ts'
+import { normalizeUnit } from './units.ts'
 
 export function newId(): string {
   if (crypto.randomUUID) return crypto.randomUUID()
@@ -60,8 +61,9 @@ export function normalizeItem(raw: unknown, now = Date.now()): PantryItem | null
   const item: PantryItem = {
     id: asString(row.id).trim() || newId(),
     name,
+    brand: asString(row.brand).trim(),
     quantity: asQuantity(row.quantity),
-    unit: asString(row.unit, 'pcs').trim() || 'pcs',
+    unit: normalizeUnit(asString(row.unit, 'pcs')),
     category: asString(row.category).trim(),
     expiryDate,
     notes: asString(row.notes).trim(),
@@ -121,6 +123,7 @@ export function toBackupCsv(items: PantryItem[]): string {
   const header = [
     'id',
     'name',
+    'brand',
     'quantity',
     'unit',
     'category',
@@ -137,6 +140,7 @@ export function toBackupCsv(items: PantryItem[]): string {
       [
         csvCell(item.id),
         csvCell(item.name),
+        csvCell(item.brand),
         csvCell(item.quantity),
         csvCell(item.unit),
         csvCell(item.category),
