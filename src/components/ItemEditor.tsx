@@ -5,6 +5,7 @@ import { findBarcodeMatch, normalizeBarcode } from '../lib/barcode.ts'
 import { addDaysIso } from '../lib/dates.ts'
 import { findNameMatch, formatQuantity, uniqueBrands } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
+import { inferPackSize, isContinuousUnit, readPackSizeOverride, writePackSizeOverride } from '../lib/packSize.ts'
 import { parseThreshold } from '../lib/stock.ts'
 import type { ItemDraft, PantryItem, RecentItem } from '../types.ts'
 
@@ -67,6 +68,11 @@ export function ItemEditor({
   const [thresholdText, setThresholdText] = useState(
     item?.lowStockThreshold == null ? '' : String(item.lowStockThreshold),
   )
+  const [packSizeText, setPackSizeText] = useState(() => {
+    if (!item || !isContinuousUnit(item.unit)) return ''
+    const override = readPackSizeOverride(item.id)
+    return String(override ?? inferPackSize(item))
+  })
   const [seenBarcode, setSeenBarcode] = useState(incomingBarcode ?? null)
   const [seenSeed, setSeenSeed] = useState(initialDraft)
 
@@ -188,6 +194,12 @@ export function ItemEditor({
         quantity: Number(draft.quantity),
         lowStockThreshold: parseThreshold(thresholdText),
       })
+      if (item && isContinuousUnit(draft.unit)) {
+        const parsed = Number(packSizeText.replace(',', '.'))
+        if (Number.isFinite(parsed) && parsed > 0) {
+          writePackSizeOverride(item.id, parsed)
+        }
+      }
       onClose()
     } catch {
       setError('Could not save. Try again.')
@@ -300,6 +312,21 @@ export function ItemEditor({
 
           {volumeMissingHint ? (
             <p className="form-hint form-flag">Volume not found — enter mL.</p>
+          ) : null}
+
+          {item && isContinuousUnit(draft.unit) ? (
+            <label>
+              Pack / bottle size ({unitLabel(draft.unit)})
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                value={packSizeText}
+                onChange={(event) => setPackSizeText(event.target.value)}
+                placeholder="Full container size for fill %"
+              />
+            </label>
           ) : null}
 
           <div className="field-row">

@@ -1,34 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarcodeScanner } from './components/BarcodeScanner.tsx'
+import { BottomActionBar } from './components/BottomActionBar.tsx'
+import { CompactListView } from './components/CompactListView.tsx'
+import { CompactTopBar } from './components/CompactTopBar.tsx'
 import { EmptyState } from './components/EmptyState.tsx'
-import { Header } from './components/Header.tsx'
 import { InstallHint } from './components/InstallHint.tsx'
-import { ItemCard } from './components/ItemCard.tsx'
+import { attentionItems, ItemCard } from './components/ItemCard.tsx'
 import { ItemEditor } from './components/ItemEditor.tsx'
-import { LowStockBanner } from './components/LowStockBanner.tsx'
-import { QuickAdd } from './components/QuickAdd.tsx'
+import { NeedsAttentionStrip } from './components/NeedsAttentionStrip.tsx'
+import { PostScanSheet } from './components/PostScanSheet.tsx'
 import { Settings } from './components/Settings.tsx'
 import { Toast } from './components/Toast.tsx'
-import { Toolbar } from './components/Toolbar.tsx'
 import { Welcome } from './components/Welcome.tsx'
-import { CATEGORIES, DEFAULT_UNIT, INSTALL_HINT_KEY, WELCOME_KEY } from './constants.ts'
+import { CATEGORIES, INSTALL_HINT_KEY, WELCOME_KEY } from './constants.ts'
 import { emptyDraft, usePantry } from './hooks/usePantry.ts'
 import { useSheetSync } from './hooks/useSheetSync.ts'
 import { maybeLocalNotify, syncAppBadge } from './lib/alerts.ts'
 import { findBarcodeMatch } from './lib/barcode.ts'
 import { parseScannedCode } from './lib/gs1Barcode.ts'
+import { writePackSizeOverride } from './lib/packSize.ts'
 import { applyLookupToDraft, lookupProduct, type ProductLookup } from './lib/productLookup.ts'
 import { filterAndSort, formatQuantity, uniqueCategories } from './lib/query.ts'
 import {
-  dismissBanner,
-  isBannerDismissed,
   readAlertPrefs,
   readLastAdd,
   readRecents,
   writeAlertPrefs,
 } from './lib/prefs.ts'
-import { isLowStock, lowStockItems, lowStockKey } from './lib/stock.ts'
+import { isLowStock } from './lib/stock.ts'
 import { applyTheme, isStandalone, readThemeMode } from './lib/theme.ts'
+import { readViewMode, writeViewMode, type PantryViewMode } from './lib/viewPrefs.ts'
 import type { AlertPrefs, ItemDraft, RecentItem, SortMode, StockFilter, ThemeMode } from './types.ts'
 
 function readFlag(key: string): boolean {
@@ -47,6 +48,15 @@ function writeFlag(key: string): void {
   }
 }
 
+interface PostScanState {
+  draft: ItemDraft
+  volumeMl: number | null
+  lookupStatus: 'idle' | 'loading' | 'found' | 'miss'
+  highlightExpiry: boolean
+  gs1ExpiryApplied: boolean
+  volumeMissingHint: boolean
+}
+
 export default function App() {
   const pantry = usePantry()
   const sheetSync = useSheetSync(pantry.refreshFromSync)
@@ -58,11 +68,13 @@ export default function App() {
     setLocalChangeHandler(scheduleSync)
     return () => setLocalChangeHandler(null)
   }, [setLocalChangeHandler, scheduleSync])
+
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [stock, setStock] = useState<StockFilter>('all')
-  const [sort, setSort] = useState<SortMode>('updated')
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeMode())
+  const [sort] = useState<SortMode>('updated')
+  const [viewMode, setViewMode] = useState<PantryViewMode>(() => readViewMode())
+  const [themeMode] = useState<ThemeMode>(() => readThemeMode())
   const [editorId, setEditorId] = useState<string | 'new' | null>(null)
   const [editorSeed, setEditorSeed] = useState<ItemDraft | null>(null)
   const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'found' | 'miss'>('idle')
@@ -71,31 +83,34 @@ export default function App() {
     volumeMissingHint: false,
     gs1ExpiryApplied: false,
   })
+  const [postScan, setPostScan] = useState<PostScanState | null>(null)
   const [incomingBarcode, setIncomingBarcode] = useState<string | null>(null)
-  const [scannerMode, setScannerMode] = useState<'lookup' | 'attach' | null>(null)
+  const [scannerMode, setScannerMode] = useState<'lookup' | 'attach' | 'expiry-ocr' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showWelcome, setShowWelcome] = useState(() => !readFlag(WELCOME_KEY))
   const [showInstallHint, setShowInstallHint] = useState(
     () => !readFlag(INSTALL_HINT_KEY) && !isStandalone(),
   )
-  const [recents, setRecents] = useState<RecentItem[]>(() => readRecents())
-  const [lastAdd, setLastAdd] = useState(() => readLastAdd())
+  const [recents] = useState<RecentItem[]>(() => readRecents())
+  const [lastAdd] = useState(() => readLastAdd())
   const [alertPrefs, setAlertPrefs] = useState<AlertPrefs>(() => readAlertPrefs())
-  const [bannerHiddenKey, setBannerHiddenKey] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const scanDemoRan = useRef(false)
+  const fixtureLoaded = useRef(false)
+  const datePickRef = useRef<HTMLInputElement>(null)
 
-  const lowItems = useMemo(() => lowStockItems(pantry.items), [pantry.items])
-  const bannerKey = useMemo(() => lowStockKey(pantry.items), [pantry.items])
+  const lowItems = useMemo(() => attentionItems(pantry.items), [pantry.items])
+
+  const syncLabel = useMemo(() => {
+    const { url, lastSyncedAt, lastError } = sheetSync.syncState
+    if (!url) return `Synced · ${pantry.stats.total} items`
+    if (lastError) return 'Sync error · tap to fix'
+    if (lastSyncedAt) return `Synced · ${pantry.stats.total} items`
+    return `Sheet · ${pantry.stats.total} items`
+  }, [sheetSync.syncState, pantry.stats.total])
 
   useEffect(() => {
     applyTheme(themeMode)
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => {
-      if (themeMode === 'system') applyTheme('system')
-    }
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
   }, [themeMode])
 
   useEffect(() => {
@@ -124,6 +139,31 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  useEffect(() => {
+    if (!pantry.ready || fixtureLoaded.current) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('fixture') !== 'live') return
+    fixtureLoaded.current = true
+    void fetch(`${import.meta.env.BASE_URL}fixtures/pantry-live-items.json`)
+      .then((res) => res.json())
+      .then((body: { items?: unknown[] }) => {
+        if (Array.isArray(body.items)) {
+          void pantry.replaceItems(body.items as Parameters<typeof pantry.replaceItems>[0])
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      })
+  }, [pantry.ready, pantry.replaceItems])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('view') === 'list') {
+      setViewMode('list')
+      writeViewMode('list')
+    }
+  }, [])
+
   const categories = useMemo(
     () => uniqueCategories(pantry.items, CATEGORIES),
     [pantry.items],
@@ -138,12 +178,6 @@ export default function App() {
     ? (pantry.items.find((item) => item.id === editorId) ?? null)
     : null
 
-  const cycleTheme = () => {
-    const order: ThemeMode[] = ['system', 'light', 'dark']
-    const next = order[(order.indexOf(themeMode) + 1) % order.length]
-    setThemeMode(next)
-  }
-
   const closeWelcome = () => {
     writeFlag(WELCOME_KEY)
     setShowWelcome(false)
@@ -153,12 +187,6 @@ export default function App() {
     setQuery('')
     setCategory('all')
     setStock('all')
-    setSort('updated')
-  }
-
-  const refreshLocals = () => {
-    setRecents(readRecents())
-    setLastAdd(readLastAdd())
   }
 
   const saveDraft = async (draft: ItemDraft) => {
@@ -167,7 +195,6 @@ export default function App() {
       return
     }
     const result = await pantry.addItem(draft)
-    refreshLocals()
     if (result.bumped) {
       setToast(
         `Added ${formatQuantity(result.addedBy)} to ${result.item.name} · now ${formatQuantity(result.item.quantity)} ${result.item.unit}`,
@@ -176,43 +203,17 @@ export default function App() {
     resetFilters()
   }
 
-  const quickAddName = async (name: string) => {
-    const result = await pantry.addItem({
-      name,
-      brand: '',
-      quantity: 1,
-      unit: lastAdd?.unit || DEFAULT_UNIT,
-      category: lastAdd?.category || '',
-      expiryDate: '',
-      notes: '',
-      lowStockThreshold: null,
-      barcode: '',
-    })
-    refreshLocals()
-    if (result.bumped) {
-      setToast(
-        `Added 1 to ${result.item.name} · now ${formatQuantity(result.item.quantity)} ${result.item.unit}`,
-      )
-    } else {
-      setToast(`Added ${result.item.name}`)
-    }
-  }
-
-  const addRecent = async (recent: RecentItem) => {
-    const result = await pantry.restockRecent(recent.name, recent.unit, recent.category)
-    refreshLocals()
-    if (result.bumped) {
-      setToast(
-        `Added 1 to ${result.item.name} · now ${formatQuantity(result.item.quantity)} ${result.item.unit}`,
-      )
-    } else {
-      setToast(`Added ${result.item.name}`)
-    }
-  }
-
   const onAdjust = async (id: string, delta: number) => {
     const before = pantry.items.find((item) => item.id === id)
     const after = await pantry.adjustQuantity(id, delta)
+    if (before && after && !isLowStock(before) && isLowStock(after)) {
+      setToast(`${after.name} is running low`)
+    }
+  }
+
+  const onSetQuantity = async (id: string, quantity: number) => {
+    const before = pantry.items.find((item) => item.id === id)
+    const after = await pantry.setQuantity(id, quantity)
     if (before && after && !isLowStock(before) && isLowStock(after)) {
       setToast(`${after.name} is running low`)
     }
@@ -231,6 +232,7 @@ export default function App() {
     setLookupStatus('idle')
     setIncomingBarcode(null)
     setScanHints({ highlightExpiry: false, volumeMissingHint: false, gs1ExpiryApplied: false })
+    setPostScan(null)
     setEditorId('new')
   }
 
@@ -244,6 +246,19 @@ export default function App() {
   const prefillFromLookup = async (code: string, seed: ItemDraft, gs1Expiry: boolean) => {
     setLookupStatus('loading')
     const found = await lookupProduct(code)
+    const merged = found ? applyLookupToDraft(seed, found) : seed
+    setPostScan((current) => {
+      if (!current || current.draft.barcode !== code) return current
+      return {
+        ...current,
+        draft: merged,
+        volumeMl: found?.volumeMl ?? null,
+        lookupStatus: found?.name ? 'found' : 'miss',
+        volumeMissingHint: Boolean(found?.volumeUnknown),
+        highlightExpiry: gs1Expiry ? false : !merged.expiryDate,
+        gs1ExpiryApplied: gs1Expiry && Boolean(merged.expiryDate),
+      }
+    })
     setEditorSeed((current) => {
       if (!current || current.barcode !== code) return current
       if (!found) return current
@@ -257,6 +272,18 @@ export default function App() {
     setLookupStatus(found?.name ? 'found' : 'miss')
   }
 
+  const openPostScan = (seed: ItemDraft, gs1Expiry: boolean) => {
+    setPostScan({
+      draft: seed,
+      volumeMl: null,
+      lookupStatus: 'idle',
+      highlightExpiry: !gs1Expiry && !seed.expiryDate,
+      gs1ExpiryApplied: gs1Expiry && Boolean(seed.expiryDate),
+      volumeMissingHint: false,
+    })
+    setEditorSeed(seed)
+  }
+
   const onScannedBarcode = async (raw: string) => {
     const parsed = parseScannedCode(raw)
     const code = parsed.barcode
@@ -266,6 +293,11 @@ export default function App() {
 
     if (mode === 'attach') {
       setIncomingBarcode(code)
+      return
+    }
+
+    if (mode === 'expiry-ocr') {
+      setToast('OCR expiry: use full editor to confirm the scanned date.')
       return
     }
 
@@ -289,13 +321,18 @@ export default function App() {
       expiryDate: parsed.expiryDate ?? '',
     }
     const gs1Expiry = Boolean(parsed.expiryDate)
-    openNew(seed)
-    setScanHints({
-      highlightExpiry: !gs1Expiry,
-      volumeMissingHint: false,
-      gs1ExpiryApplied: gs1Expiry,
-    })
+    openPostScan(seed, gs1Expiry)
     await prefillFromLookup(code, seed, gs1Expiry)
+  }
+
+  const savePostScan = async (draft: ItemDraft, packSize: number | null) => {
+    const result = await pantry.addItem(draft)
+    if (packSize != null && packSize > 0) {
+      writePackSizeOverride(result.item.id, packSize)
+    }
+    setPostScan(null)
+    setToast(`Added ${result.item.name}`)
+    resetFilters()
   }
 
   useEffect(() => {
@@ -309,14 +346,14 @@ export default function App() {
         await onScannedBarcode('(01)08410660098804(17)251231')
         return
       }
-      if (demo === 'olive-oil') {
+      if (demo === 'olive-oil' || demo === 'post-scan-sheet') {
         await onScannedBarcode('8410660098804')
         return
       }
       if (demo === 'volume-miss') {
         const code = '7935737788880'
         const seed: ItemDraft = { ...emptyDraft(lastAdd), barcode: code }
-        openNew(seed)
+        openPostScan(seed, false)
         const stub: ProductLookup = {
           name: 'Fish sauce',
           brand: 'Three Crabs',
@@ -325,13 +362,15 @@ export default function App() {
           volumeMl: null,
           volumeUnknown: true,
         }
-        setEditorSeed(applyLookupToDraft(seed, stub))
-        setScanHints({
+        const merged = applyLookupToDraft(seed, stub)
+        setPostScan({
+          draft: merged,
+          volumeMl: null,
+          lookupStatus: 'found',
           highlightExpiry: true,
-          volumeMissingHint: true,
           gs1ExpiryApplied: false,
+          volumeMissingHint: true,
         })
-        setLookupStatus('found')
         return
       }
     }
@@ -339,38 +378,35 @@ export default function App() {
   }, [pantry.ready, lastAdd])
 
   const filteredEmpty = pantry.items.length > 0 && visible.length === 0
-  const showQuickAdd = pantry.ready && !pantry.error && (pantry.items.length > 0 || recents.length > 0)
-  const showLowBanner =
-    pantry.ready &&
-    !showWelcome &&
-    lowItems.length > 0 &&
-    bannerHiddenKey !== bannerKey &&
-    !isBannerDismissed(bannerKey)
+
+  const onViewMode = (mode: PantryViewMode) => {
+    setViewMode(mode)
+    writeViewMode(mode)
+  }
+
+  const onSyncTap = () => {
+    if (sheetSync.syncState.url) {
+      void sheetSync.syncNow()
+    } else {
+      setShowSettings(true)
+    }
+  }
 
   return (
     <div className="app">
-      <Header
-        themeMode={themeMode}
-        onCycleTheme={cycleTheme}
-        onOpenSettings={() => setShowSettings(true)}
-        onScan={() => setScannerMode('lookup')}
+      <CompactTopBar
         total={pantry.stats.total}
-        expiring={pantry.stats.expiring}
-        empty={pantry.stats.empty}
-        low={pantry.stats.low}
-      />
-
-      <Toolbar
-        query={query}
-        onQuery={setQuery}
+        syncLabel={syncLabel}
+        onSyncTap={onSyncTap}
+        viewMode={viewMode}
+        onViewMode={onViewMode}
+        stock={stock}
+        onStock={setStock}
         category={category}
         onCategory={setCategory}
         categories={categories}
-        stock={stock}
-        onStock={setStock}
-        sort={sort}
-        onSort={setSort}
         lowCount={pantry.stats.low}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {showInstallHint && !showWelcome ? (
@@ -382,34 +418,11 @@ export default function App() {
         />
       ) : null}
 
-      {showLowBanner ? (
-        <LowStockBanner
-          items={lowItems}
-          onShow={() => {
-            setStock('low')
-            setCategory('all')
-            setQuery('')
-            dismissBanner(bannerKey)
-            setBannerHiddenKey(bannerKey)
-          }}
-          onDismiss={() => {
-            dismissBanner(bannerKey)
-            setBannerHiddenKey(bannerKey)
-          }}
-        />
+      {!showWelcome && lowItems.length > 0 && stock === 'all' ? (
+        <NeedsAttentionStrip items={lowItems} onSelect={openExisting} />
       ) : null}
 
-      {showQuickAdd ? (
-        <QuickAdd
-          recents={recents}
-          busy={!pantry.ready}
-          onAdd={quickAddName}
-          onRecent={addRecent}
-          onScan={() => setScannerMode('lookup')}
-        />
-      ) : null}
-
-      <main className="feed">
+      <main className="feed studio-feed">
         {!pantry.ready ? (
           <p className="loading">Opening pantry…</p>
         ) : pantry.error ? (
@@ -422,14 +435,21 @@ export default function App() {
             onSample={() => void pantry.loadSamples()}
             onClearFilters={resetFilters}
           />
+        ) : viewMode === 'list' ? (
+          <CompactListView
+            items={visible}
+            onOpen={openExisting}
+            onSetQuantity={(id, qty) => void onSetQuantity(id, qty)}
+          />
         ) : (
-          <ul className="item-list">
+          <ul className="item-list studio-cards">
             {visible.map((item) => (
               <li key={item.id}>
                 <ItemCard
                   item={item}
                   onOpen={() => openExisting(item.id)}
                   onAdjust={(delta) => void onAdjust(item.id, delta)}
+                  onSetQuantity={(qty) => void onSetQuantity(item.id, qty)}
                   onEmpty={() => void pantry.markEmpty(item.id)}
                 />
               </li>
@@ -439,17 +459,60 @@ export default function App() {
       </main>
 
       {pantry.ready ? (
-        <button
-          type="button"
-          className="fab"
-          aria-label="Add pantry item"
-          onClick={() => openNew()}
-        >
-          +
-        </button>
+        <BottomActionBar
+          query={query}
+          onQuery={setQuery}
+          itemCount={pantry.stats.total}
+          onScan={() => setScannerMode('lookup')}
+          onAdd={() => openNew()}
+        />
       ) : null}
 
+      <input
+        ref={datePickRef}
+        type="date"
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(event) => {
+          if (!postScan) return
+          setPostScan({
+            ...postScan,
+            draft: { ...postScan.draft, expiryDate: event.target.value },
+          })
+        }}
+      />
+
       {toast ? <Toast message={toast} /> : null}
+
+      {postScan ? (
+        <PostScanSheet
+          draft={postScan.draft}
+          lookupStatus={postScan.lookupStatus}
+          volumeMl={postScan.volumeMl}
+          highlightExpiry={postScan.highlightExpiry}
+          gs1ExpiryApplied={postScan.gs1ExpiryApplied}
+          onClose={() => setPostScan(null)}
+          onSave={savePostScan}
+          onMoreDetails={() => {
+            openNew(postScan.draft)
+            setLookupStatus(postScan.lookupStatus)
+            setScanHints({
+              highlightExpiry: postScan.highlightExpiry,
+              volumeMissingHint: postScan.volumeMissingHint,
+              gs1ExpiryApplied: postScan.gs1ExpiryApplied,
+            })
+            setPostScan(null)
+          }}
+          onPickDate={() => datePickRef.current?.showPicker?.() ?? datePickRef.current?.click()}
+          onScanExpiryOcr={() => {
+            setScannerMode('expiry-ocr')
+            openNew(postScan.draft)
+            setScanHints((h) => ({ ...h, highlightExpiry: true }))
+            setPostScan(null)
+          }}
+        />
+      ) : null}
 
       {editorId ? (
         <ItemEditor
@@ -481,7 +544,7 @@ export default function App() {
         />
       ) : null}
 
-      {scannerMode ? (
+      {scannerMode && scannerMode !== 'expiry-ocr' ? (
         <BarcodeScanner
           onClose={() => setScannerMode(null)}
           onDetect={(code) => void onScannedBarcode(code)}
