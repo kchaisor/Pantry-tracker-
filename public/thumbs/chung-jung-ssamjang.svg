@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <rect width="48" height="48" rx="8" fill="#FFFFFF"/>
-  <rect x="0.5" y="0.5" width="47" height="47" rx="7.5" fill="none" stroke="#E8E2D9"/>
-  <ellipse cx="24" cy="34" rx="13" ry="6" fill="#C62828"/><rect x="11" y="16" width="26" height="18" rx="6" fill="#C62828"/><rect x="14" y="19" width="20" height="8" rx="2" fill="#FFEBEE" opacity="0.35"/>
-  <text x="24" y="44" text-anchor="middle" font-family="system-ui,sans-serif" font-size="7" font-weight="700" fill="#C62828">CJ</text>
-</svg>

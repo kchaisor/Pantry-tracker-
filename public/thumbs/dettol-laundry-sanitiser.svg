@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <rect width="48" height="48" rx="8" fill="#FFFFFF"/>
-  <rect x="0.5" y="0.5" width="47" height="47" rx="7.5" fill="none" stroke="#E8E2D9"/>
-  <rect x="14" y="8" width="20" height="6" rx="2" fill="#E8F5E9"/><path d="M16 14h16v22c0 2-1.5 4-4 4H20c-2.5 0-4-2-4-4V14z" fill="#2E7D32"/><rect x="19" y="18" width="10" height="12" rx="1" fill="#E8F5E9" opacity="0.35"/>
-  <text x="24" y="44" text-anchor="middle" font-family="system-ui,sans-serif" font-size="7" font-weight="700" fill="#2E7D32">Dt</text>
-</svg>

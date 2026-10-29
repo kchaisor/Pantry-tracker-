@@ -40,7 +40,7 @@ describe('curated live fixture thumbnails', () => {
       const url = resolveItemThumbnail(item)
       expect(url).toBeTruthy()
       expect(url).toContain('/thumbs/')
-      expect(url).toMatch(/\.svg$/)
+      expect(url).toMatch(/\.jpg$/)
     })
   }
 })

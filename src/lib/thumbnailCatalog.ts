@@ -1,6 +1,6 @@
 import { normalizeName } from './query.ts'
 
-/** Bundled SVG slug (under `public/thumbs/`). */
+/** Bundled photo slug (under `public/thumbs/` → `<slug>.jpg`). */
 export type ThumbSlug = string
 
 export const THUMB_BARCODE_SLUG: Record<string, ThumbSlug> = {
@@ -58,20 +58,6 @@ const THUMB_NAME_SLUG_RAW: Record<string, ThumbSlug> = {
   [normalizeName('Koala Eco Brighten & Whiten Oxygenated Bleach (Fragrance Free)')]:
     'koala-eco-bleach',
   [normalizeName('La Española Extra Virgin Olive Oil')]: 'la-espanola-olive-oil',
-  [normalizeName('Finish Rinse Aid')]: 'finish-rinse-aid',
-  [normalizeName('Finish Quantum Tablets')]: 'finish-quantum-tablets',
-  [normalizeName('Sorbent Facial Tissues')]: 'sorbent-tissues',
-  [normalizeName('Morning Fresh Dishwashing Liquid')]: 'morning-fresh-dishwashing',
-  [normalizeName('Palmolive Hand Wash')]: 'palmolive-hand-wash',
-  [normalizeName("Ajax Spray n' Wipe")]: 'ajax-spray-wipe',
-  [normalizeName('Pine O Cleen Disinfectant')]: 'pine-o-cleen',
-  [normalizeName('Quilton Paper Towel')]: 'quilton-paper-towel',
-  [normalizeName('Glad Chux Superwipes')]: 'glad-chux-superwipes',
-  [normalizeName("Bosisto's Eucalyptus Spray")]: 'bosistos-eucalyptus',
-  [normalizeName('Mortein Surface Spray')]: 'mortein-surface-spray',
-  [normalizeName('White King Bleach')]: 'white-king-bleach',
-  [normalizeName('Handee Ultra Paper Towel')]: 'handee-paper-towel',
-  [normalizeName('Aerogard Odourless')]: 'aerogard-odourless',
 }
 
 export function slugForItemName(name: string): ThumbSlug | null {
@@ -81,7 +67,7 @@ export function slugForItemName(name: string): ThumbSlug | null {
 
 export function bundledThumbUrl(slug: ThumbSlug): string {
   const base = import.meta.env.BASE_URL
-  return `${base}thumbs/${slug}.svg`
+  return `${base}thumbs/${slug}.jpg`
 }
 
 export function slugForItem(
