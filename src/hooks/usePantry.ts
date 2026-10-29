@@ -194,6 +194,17 @@ export function usePantry() {
     [patchItem],
   )
 
+  const setQuantity = useCallback(
+    async (id: string, quantity: number) => {
+      return patchItem(id, (existing) => ({
+        ...existing,
+        quantity: clampQuantity(quantity),
+        updatedAt: Date.now(),
+      }))
+    },
+    [patchItem],
+  )
+
   const restockRecent = useCallback(
     async (name: string, unit: string, category: string) => {
       const match = findNameMatch(itemsRef.current, name)
@@ -284,6 +295,7 @@ export function usePantry() {
     updateItem,
     removeItem,
     adjustQuantity,
+    setQuantity,
     markEmpty,
     restockRecent,
     loadSamples,

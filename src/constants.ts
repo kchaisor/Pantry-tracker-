@@ -11,6 +11,7 @@ export const LAST_ADD_KEY = 'pantry.lastAdd'
 export const RECENTS_KEY = 'pantry.recents'
 export const ALERT_PREFS_KEY = 'pantry.alertPrefs'
 export const BANNER_DISMISS_KEY = 'pantry.lowBanner'
+export const VIEW_MODE_KEY = 'pantry.viewMode'
 export const NOTIFY_DAY_KEY = 'pantry.notify.day'
 export const SOON_DAYS = 3
 export const MAX_RECENTS = 8

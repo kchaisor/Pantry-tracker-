@@ -1,5 +1,7 @@
 import { CATEGORIES } from '../constants.ts'
 import { normalizeBarcode } from './barcode.ts'
+import { bundledThumbUrl } from './thumbnailCatalog.ts'
+import { persistItemThumbnail } from './thumbnails.ts'
 import { volumeFromProductFields } from './productVolume.ts'
 import type { Category, ItemDraft } from '../types.ts'
 
@@ -10,11 +12,25 @@ export interface ProductLookup {
   isLiquid: boolean
   volumeMl: number | null
   volumeUnknown: boolean
+  imageUrl?: string | null
 }
 
 const OFF_FIELDS =
-  'product_name,product_name_en,generic_name,brands,categories_tags,quantity,product_quantity,product_quantity_unit'
+  'product_name,product_name_en,generic_name,brands,categories_tags,quantity,product_quantity,product_quantity_unit,image_front_small_url,image_front_thumb_url,image_url'
 const LOOKUP_MS = 4500
+
+/** Offline-safe catalog hits (checked before network). */
+export const BUILTIN_BARCODE_CATALOG: Record<string, ProductLookup> = {
+  '8410660098804': {
+    name: 'La Española Extra Virgin Olive Oil',
+    brand: 'La Española',
+    category: 'Pantry',
+    isLiquid: true,
+    volumeMl: 1000,
+    volumeUnknown: false,
+    imageUrl: bundledThumbUrl('la-espanola-olive-oil'),
+  },
+}
 
 const CATEGORY_HINTS: { tag: string; category: Category }[] = [
   { tag: 'en:milks', category: 'Dairy' },
@@ -73,6 +89,15 @@ export function primaryBrand(raw: string): string {
   return first.length <= 40 ? first : first.slice(0, 40).trim()
 }
 
+export function imageFromOff(product: Record<string, unknown>): string | null {
+  const keys = ['image_front_small_url', 'image_front_thumb_url', 'image_url'] as const
+  for (const key of keys) {
+    const value = product[key]
+    if (typeof value === 'string' && value.startsWith('http')) return value
+  }
+  return null
+}
+
 export function productFromOff(product: Record<string, unknown>): ProductLookup | null {
   const name = clipName(firstName(product))
   if (!name) return null
@@ -92,6 +117,7 @@ export function productFromOff(product: Record<string, unknown>): ProductLookup 
     isLiquid: volume.isLiquid,
     volumeMl: volume.volumeMl,
     volumeUnknown: volume.isLiquid && volume.volumeMl == null,
+    imageUrl: imageFromOff(product),
   }
 }
 
@@ -108,6 +134,20 @@ export function applyLookupToDraft(draft: ItemDraft, found: ProductLookup): Item
   return next
 }
 
+export function cacheLookupThumbnail(
+  barcode: string,
+  found: ProductLookup,
+  itemId?: string,
+): void {
+  if (!found.imageUrl) return
+  persistItemThumbnail({
+    id: itemId,
+    barcode,
+    name: found.name,
+    url: found.imageUrl,
+  })
+}
+
 /**
  * Best-effort public UPC/EAN name lookup. Fails open: network, CORS, or
  * unknown codes just return null so Kelvin can type the name.
@@ -115,6 +155,9 @@ export function applyLookupToDraft(draft: ItemDraft, found: ProductLookup): Item
 export async function lookupProduct(barcode: string): Promise<ProductLookup | null> {
   const code = normalizeBarcode(barcode)
   if (!code || !/^\d{8,14}$/.test(code)) return null
+
+  const builtin = BUILTIN_BARCODE_CATALOG[code]
+  if (builtin) return builtin
 
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`
   const controller = new AbortController()
@@ -132,6 +175,32 @@ export async function lookupProduct(barcode: string): Promise<ProductLookup | nu
     }
     if (body.status !== 1 || !body.product) return null
     return productFromOff(body.product)
+  } catch {
+    return null
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+/** Best-effort name search on Open Food Facts (non-blocking enrichment). */
+export async function searchProductByName(name: string): Promise<ProductLookup | null> {
+  const term = name.trim()
+  if (!term) return null
+
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(term)}&search_simple=1&action=process&json=1&page_size=1&fields=${OFF_FIELDS}`
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), LOOKUP_MS)
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as { products?: Record<string, unknown>[] }
+    const product = body.products?.[0]
+    if (!product) return null
+    return productFromOff(product)
   } catch {
     return null
   } finally {
