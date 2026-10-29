@@ -1,6 +1,7 @@
 import { formatQuantity } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { PantryItem } from '../types.ts'
+import { ProductThumb } from './ProductThumb.tsx'
 
 interface NeedsAttentionStripProps {
   items: PantryItem[]
@@ -21,12 +22,15 @@ export function NeedsAttentionStrip({ items, onSelect }: NeedsAttentionStripProp
       <div className="studio-urgency-pills">
         {shown.map((item) => (
           <button
-            key={item.id}
+            key={item.id || item.name}
             type="button"
             className={`u-pill ${item.quantity <= 0 ? 'low' : 'warn'}`}
             onClick={() => onSelect(item.id)}
           >
-            {item.name.split('(')[0].trim()} · {formatQuantity(item.quantity)} {unitLabel(item.unit)}
+            <ProductThumb item={item} size="xs" className="u-pill-thumb" />
+            <span className="u-pill-text">
+              {item.name.split('(')[0].trim()} · {formatQuantity(item.quantity)} {unitLabel(item.unit)}
+            </span>
           </button>
         ))}
       </div>

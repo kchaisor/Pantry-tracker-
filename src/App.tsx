@@ -19,7 +19,14 @@ import { maybeLocalNotify, syncAppBadge } from './lib/alerts.ts'
 import { findBarcodeMatch } from './lib/barcode.ts'
 import { parseScannedCode } from './lib/gs1Barcode.ts'
 import { writePackSizeOverride } from './lib/packSize.ts'
-import { applyLookupToDraft, lookupProduct, type ProductLookup } from './lib/productLookup.ts'
+import {
+  applyLookupToDraft,
+  cacheLookupThumbnail,
+  lookupProduct,
+  searchProductByName,
+  type ProductLookup,
+} from './lib/productLookup.ts'
+import { enrichThumbnailInBackground, resolveThumbnailByBarcode } from './lib/thumbnails.ts'
 import { filterAndSort, formatQuantity, uniqueCategories } from './lib/query.ts'
 import {
   readAlertPrefs,
@@ -51,6 +58,7 @@ function writeFlag(key: string): void {
 interface PostScanState {
   draft: ItemDraft
   volumeMl: number | null
+  imageUrl: string | null
   lookupStatus: 'idle' | 'loading' | 'found' | 'miss'
   highlightExpiry: boolean
   gs1ExpiryApplied: boolean
@@ -157,6 +165,13 @@ export default function App() {
   }, [pantry.ready, pantry.replaceItems])
 
   useEffect(() => {
+    if (!pantry.ready) return
+    for (const item of pantry.items) {
+      void enrichThumbnailInBackground(item, lookupProduct, searchProductByName)
+    }
+  }, [pantry.ready, pantry.items])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('view') === 'list') {
       setViewMode('list')
@@ -246,13 +261,16 @@ export default function App() {
   const prefillFromLookup = async (code: string, seed: ItemDraft, gs1Expiry: boolean) => {
     setLookupStatus('loading')
     const found = await lookupProduct(code)
+    if (found) cacheLookupThumbnail(code, found)
     const merged = found ? applyLookupToDraft(seed, found) : seed
+    const imageUrl = found?.imageUrl ?? resolveThumbnailByBarcode(code)
     setPostScan((current) => {
       if (!current || current.draft.barcode !== code) return current
       return {
         ...current,
         draft: merged,
         volumeMl: found?.volumeMl ?? null,
+        imageUrl,
         lookupStatus: found?.name ? 'found' : 'miss',
         volumeMissingHint: Boolean(found?.volumeUnknown),
         highlightExpiry: gs1Expiry ? false : !merged.expiryDate,
@@ -276,6 +294,7 @@ export default function App() {
     setPostScan({
       draft: seed,
       volumeMl: null,
+      imageUrl: resolveThumbnailByBarcode(seed.barcode),
       lookupStatus: 'idle',
       highlightExpiry: !gs1Expiry && !seed.expiryDate,
       gs1ExpiryApplied: gs1Expiry && Boolean(seed.expiryDate),
@@ -330,6 +349,15 @@ export default function App() {
     if (packSize != null && packSize > 0) {
       writePackSizeOverride(result.item.id, packSize)
     }
+    cacheLookupThumbnail(draft.barcode, {
+      name: draft.name,
+      brand: draft.brand,
+      category: draft.category,
+      isLiquid: false,
+      volumeMl: null,
+      volumeUnknown: false,
+      imageUrl: resolveThumbnailByBarcode(draft.barcode) ?? undefined,
+    }, result.item.id)
     setPostScan(null)
     setToast(`Added ${result.item.name}`)
     resetFilters()
@@ -366,6 +394,7 @@ export default function App() {
         setPostScan({
           draft: merged,
           volumeMl: null,
+          imageUrl: null,
           lookupStatus: 'found',
           highlightExpiry: true,
           gs1ExpiryApplied: false,
@@ -490,6 +519,7 @@ export default function App() {
           draft={postScan.draft}
           lookupStatus={postScan.lookupStatus}
           volumeMl={postScan.volumeMl}
+          imageUrl={postScan.imageUrl}
           highlightExpiry={postScan.highlightExpiry}
           gs1ExpiryApplied={postScan.gs1ExpiryApplied}
           onClose={() => setPostScan(null)}

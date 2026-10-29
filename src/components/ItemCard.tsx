@@ -13,6 +13,7 @@ import { formatQuantity } from '../lib/query.ts'
 import { effectiveThreshold, isLowStock } from '../lib/stock.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { PantryItem } from '../types.ts'
+import { ProductThumb } from './ProductThumb.tsx'
 
 interface ItemCardProps {
   item: PantryItem
@@ -42,6 +43,7 @@ export function ItemCard({ item, onOpen, onAdjust, onSetQuantity, onEmpty }: Ite
   return (
     <article className={`studio-card tone-${tone} ${tone === 'low' ? 'is-low' : ''}`}>
       <button type="button" className="studio-card-head" onClick={onOpen}>
+        <ProductThumb item={item} size="md" className="studio-card-thumb" />
         <div className="studio-card-copy">
           {brandLine ? <p className="studio-brand">{brandLine}</p> : null}
           <h2 className="studio-item-name">{item.name}</h2>

@@ -1096,6 +1096,20 @@ textarea:focus-visible {
   padding: 4px 8px;
   border-radius: 8px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+}
+
+.u-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.u-pill-thumb {
+  flex-shrink: 0;
 }
 
 .u-pill.warn {
@@ -1139,6 +1153,55 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: 8px;
   align-items: flex-start;
+}
+
+.studio-card-thumb {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.product-thumb-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid #e8e2d9;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.product-thumb-wrap--xs {
+  width: 20px;
+  height: 20px;
+}
+
+.product-thumb-wrap--sm {
+  width: 28px;
+  height: 28px;
+}
+
+.product-thumb-wrap--md {
+  width: 38px;
+  height: 38px;
+}
+
+.product-thumb-wrap--lg {
+  width: 48px;
+  height: 48px;
+}
+
+.product-thumb,
+.product-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.studio-card-copy {
+  flex: 1;
+  min-width: 0;
 }
 
 .studio-brand {
@@ -1341,7 +1404,7 @@ textarea:focus-visible {
 .studio-list-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: auto 1fr auto auto auto;
   gap: 6px;
   align-items: center;
   padding: 8px 4px;
@@ -1420,6 +1483,18 @@ textarea:focus-visible {
 
 .post-scan-product {
   padding: 4px 0 12px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.post-scan-product-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.post-scan-thumb {
+  flex-shrink: 0;
 }
 
 .post-scan-brand {

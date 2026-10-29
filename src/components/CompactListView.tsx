@@ -10,6 +10,7 @@ import { formatQuantity } from '../lib/query.ts'
 import { isLowStock } from '../lib/stock.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { PantryItem } from '../types.ts'
+import { ProductThumb } from './ProductThumb.tsx'
 
 interface CompactListViewProps {
   items: PantryItem[]
@@ -49,6 +50,7 @@ export function CompactListView({ items, onOpen, onSetQuantity }: CompactListVie
               return (
                 <li key={item.id}>
                   <button type="button" className="studio-list-row" onClick={() => onOpen(item.id)}>
+                    <ProductThumb item={item} size="sm" className="studio-list-thumb" />
                     <span className="studio-list-name">{item.name}</span>
                     <span className="studio-list-qty">
                       {formatQuantity(item.quantity)} {unitLabel(item.unit)}

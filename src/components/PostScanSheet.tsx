@@ -17,11 +17,13 @@ import {
 import { formatQuantity } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { ItemDraft } from '../types.ts'
+import { ProductThumb } from './ProductThumb.tsx'
 
 interface PostScanSheetProps {
   draft: ItemDraft
   lookupStatus: 'idle' | 'loading' | 'found' | 'miss'
   volumeMl: number | null
+  imageUrl?: string | null
   highlightExpiry?: boolean
   gs1ExpiryApplied?: boolean
   onClose: () => void
@@ -43,6 +45,7 @@ export function PostScanSheet({
   draft,
   lookupStatus,
   volumeMl,
+  imageUrl,
   highlightExpiry,
   gs1ExpiryApplied,
   onClose,
@@ -117,9 +120,25 @@ export function PostScanSheet({
         </header>
 
         <div className="post-scan-product">
-          <p className="post-scan-brand">{draft.brand || lookupStatus === 'loading' ? draft.brand : 'Scanned product'}</p>
-          <h3>{draft.name.trim() || (lookupStatus === 'loading' ? 'Looking up…' : 'Unknown product')}</h3>
-          {displayVolume ? <p className="post-scan-volume">{displayVolume}</p> : null}
+          <ProductThumb
+            item={{
+              id: 'draft',
+              name: draft.name,
+              barcode: draft.barcode,
+              unit: draft.unit,
+              category: draft.category,
+            }}
+            imageUrl={imageUrl}
+            size="lg"
+            className="post-scan-thumb"
+          />
+          <div className="post-scan-product-copy">
+            <p className="post-scan-brand">
+              {draft.brand || (lookupStatus === 'loading' ? '' : 'Scanned product')}
+            </p>
+            <h3>{draft.name.trim() || (lookupStatus === 'loading' ? 'Looking up…' : 'Unknown product')}</h3>
+            {displayVolume ? <p className="post-scan-volume">{displayVolume}</p> : null}
+          </div>
         </div>
 
         <div className="post-scan-section">

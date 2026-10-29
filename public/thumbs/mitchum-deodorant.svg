@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect width="48" height="48" rx="8" fill="#FFFFFF"/>
+  <rect x="0.5" y="0.5" width="47" height="47" rx="7.5" fill="none" stroke="#E8E2D9"/>
+  <rect x="20" y="8" width="8" height="6" rx="2" fill="#ECEFF1"/><rect x="19" y="14" width="10" height="24" rx="5" fill="#37474F"/>
+  <text x="24" y="44" text-anchor="middle" font-family="system-ui,sans-serif" font-size="7" font-weight="700" fill="#37474F">Mi</text>
+</svg>

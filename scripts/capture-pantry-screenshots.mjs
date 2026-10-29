@@ -53,7 +53,7 @@ try {
 
   const cardsPage = await context.newPage()
   await cardsPage.goto(`${baseUrl}?fixture=live&view=cards`, { waitUntil: 'networkidle' })
-  await cardsPage.waitForSelector('.studio-card', { timeout: 15_000 })
+  await cardsPage.waitForSelector('.studio-card .product-thumb', { timeout: 15_000 })
   await cardsPage.screenshot({ path: path.join(outDir, 'pantry-direction-a-cards.png'), fullPage: false })
 
   const listPage = await context.newPage()
