@@ -68,8 +68,8 @@ function mergeSyncItems(a, b) {
 }
 
 /**
- * POST merge: when the live app omits `brand` on an item, keep the sheet brand if incoming wins.
- * incomingPairs: { item, hadBrand }[]
+ * POST merge: when the live app omits `brand` / `imageUrl` on an item, keep sheet values if incoming wins.
+ * incomingPairs: { item, hadBrand, hadImageUrl }[]
  */
 function mergePostItems(sheetItems, incomingPairs) {
   var sheetMap = {}
@@ -90,11 +90,12 @@ function mergePostItems(sheetItems, incomingPairs) {
       }
     }
     var sheet = sheetMap[id]
-    if (!pair || pair.hadBrand || !sheet) continue
+    if (!pair || !sheet) continue
     var incTs = parseSyncTimestamp(pair.item.updatedAt)
     var sheetTs = parseSyncTimestamp(sheet.updatedAt)
     if (incTs >= sheetTs) {
-      merged[j].brand = sheet.brand || ''
+      if (!pair.hadBrand) merged[j].brand = sheet.brand || ''
+      if (!pair.hadImageUrl) merged[j].imageUrl = sheet.imageUrl || ''
     }
   }
   return merged

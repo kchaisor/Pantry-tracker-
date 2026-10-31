@@ -62,10 +62,19 @@ export function persistItemThumbnail(entry: {
   writeThumbnailStore(store)
 }
 
+/** Same URL the UI shows: stored imageUrl, cache, or bundled slug. */
+export function resolveCanonicalImageUrl(
+  item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
+): string | null {
+  if (item.imageUrl?.trim()) return item.imageUrl.trim()
+  return resolveItemThumbnail(item)
+}
+
 /** Resolve thumbnail URL for an item (bundled assets preferred for known products). */
 export function resolveItemThumbnail(
-  item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category'>,
+  item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
 ): string | null {
+  if (item.imageUrl?.trim()) return item.imageUrl.trim()
   const store = readThumbnailStore()
   if (item.id && store.byId[item.id]) return store.byId[item.id]
   const code = normalizeBarcode(item.barcode)
@@ -126,14 +135,16 @@ export async function enrichThumbnailInBackground(
   item: PantryItem,
   lookup: (barcode: string) => Promise<{ imageUrl?: string | null } | null>,
   searchByName?: (name: string) => Promise<{ imageUrl?: string | null } | null>,
+  onUrl?: (url: string) => void,
 ): Promise<string | null> {
-  if (resolveItemThumbnail(item)) return null
+  if (item.imageUrl?.trim() || resolveItemThumbnail(item)) return null
 
   const code = normalizeBarcode(item.barcode)
   if (code) {
     const found = await lookup(code)
     if (found?.imageUrl) {
       persistItemThumbnail({ id: item.id, barcode: code, name: item.name, url: found.imageUrl })
+      onUrl?.(found.imageUrl)
       return found.imageUrl
     }
   }
@@ -142,6 +153,7 @@ export async function enrichThumbnailInBackground(
     const found = await searchByName(item.name)
     if (found?.imageUrl) {
       persistItemThumbnail({ id: item.id, barcode: code, name: item.name, url: found.imageUrl })
+      onUrl?.(found.imageUrl)
       return found.imageUrl
     }
   }

@@ -47,6 +47,8 @@ export interface PantryItem {
   lowStockThreshold: number | null
   /** Normalized UPC/EAN when known; empty string otherwise. */
   barcode: string
+  /** Product photo URL (bundled asset or Open Food Facts); optional for legacy rows. */
+  imageUrl?: string
   createdAt: number
   updatedAt: number
   /** Tombstone for sheet sync; hidden in UI when true. */

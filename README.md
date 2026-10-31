@@ -75,6 +75,19 @@ Pantry can sync with a shared Google Sheet so a separate bot (or human) can read
 
 After deploy, add an `onEdit` trigger if you want sheet UI edits to bump `updatedAt` automatically: Apps Script → **Triggers** → add `onEdit` for the spreadsheet (the simple trigger in `Code.gs` runs for the editor only; an installable trigger is optional for bots).
 
+### Updating the Apps Script (new sheet columns)
+
+When sync adds a column (for example **`image_url`** in column **N**), update the script files in the Apps Script project from this repo, then **Deploy** → **Manage deployments** → edit the existing web app deployment → **Version: New version** → **Deploy**. Keep the same deployment URL so Pantry’s saved sync URL keeps working; only the script version changes.
+
+### Product images (`image_url`)
+
+Column **N** stores each item’s product photo URL (same source as in-app thumbnails: bundled photos or Open Food Facts). The app syncs it as **`imageUrl`** on POST; **GET** (Home Assistant / bots) returns **`image_url`** on each item. Older app versions that omit `imageUrl` on POST do not clear an existing cell (same behavior as **`brand`** in column M).
+
+**Backfill existing sheet rows (one-off):**
+
+1. **Dry-run locally:** `node scripts/backfill-image-urls.mjs path/to/export.json` — prints suggested `image_url` values from the bundled slug map (does not touch Google).
+2. **On a sheet copy:** Apps Script → open `backfillImageUrls()` in `Code.gs`, set `THUMB_BASE` to your deployed app URL, run on the copy, verify column N, then repeat on production if needed.
+
 ### Bots editing the sheet directly
 
 - Do **not** delete rows — set column **`deleted`** to `TRUE` (or `true`) and bump **`updatedAt`** to current epoch milliseconds.

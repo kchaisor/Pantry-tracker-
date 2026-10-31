@@ -30,9 +30,10 @@ var BASE_HEADERS = [
 ]
 
 var BRAND_HEADER = 'brand'
-var HEADERS = BASE_HEADERS.concat([BRAND_HEADER])
+var IMAGE_URL_HEADER = 'image_url'
+var HEADERS = BASE_HEADERS.concat([BRAND_HEADER, IMAGE_URL_HEADER])
 
-var TEXT_COLUMNS = { id: 1, expiryDate: 6, barcode: 9, brand: 13 }
+var TEXT_COLUMNS = { id: 1, expiryDate: 6, barcode: 9, brand: 13, imageUrl: 14 }
 
 function doGet(e) {
   return handleRequest_(e, null)
@@ -76,6 +77,9 @@ function checkToken_(e) {
 }
 
 function jsonResponse_(obj, statusCode) {
+  if (obj && Array.isArray(obj.items)) {
+    obj = { ok: obj.ok, error: obj.error, items: obj.items.map(publicItem_) }
+  }
   var out = ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON,
   )
@@ -137,10 +141,15 @@ function ensureHeader_(sheet) {
     sheet.getRange(1, 1, 1, BASE_HEADERS.length).setValues([BASE_HEADERS])
     sheet.getRange(1, 1, 1, BASE_HEADERS.length).setFontWeight('bold')
   }
-  var brandCell = sheet.getRange(1, HEADERS.length)
+  var brandCell = sheet.getRange(1, HEADERS.length - 1)
   if (String(brandCell.getDisplayValue()).trim() !== BRAND_HEADER) {
     brandCell.setValue(BRAND_HEADER)
     brandCell.setFontWeight('bold')
+  }
+  var imageCell = sheet.getRange(1, HEADERS.length)
+  if (String(imageCell.getDisplayValue()).trim() !== IMAGE_URL_HEADER) {
+    imageCell.setValue(IMAGE_URL_HEADER)
+    imageCell.setFontWeight('bold')
   }
 }
 
@@ -196,6 +205,26 @@ function rowToItem_(valuesRow, displayRow, timeZone) {
     updatedAt: parseSyncTimestamp(valuesRow[10], now),
     deleted: isDeletedFlag(displayRow[11] != null ? displayRow[11] : valuesRow[11]),
     brand: String(displayRow[12] != null ? displayRow[12] : valuesRow[12] || '').trim(),
+    imageUrl: String(displayRow[13] != null ? displayRow[13] : valuesRow[13] || '').trim(),
+  }
+}
+
+function publicItem_(item) {
+  return {
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+    category: item.category,
+    expiryDate: item.expiryDate,
+    notes: item.notes,
+    lowStockThreshold: item.lowStockThreshold,
+    barcode: item.barcode,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    deleted: item.deleted,
+    brand: item.brand || '',
+    image_url: item.imageUrl || '',
   }
 }
 
@@ -216,8 +245,19 @@ function normalizeIncoming_(raw) {
   var hadBrand = Object.prototype.hasOwnProperty.call(raw, 'brand')
   var brand = hadBrand ? String(raw.brand || '').trim() : ''
 
+  var hadImageUrl =
+    Object.prototype.hasOwnProperty.call(raw, 'imageUrl') ||
+    Object.prototype.hasOwnProperty.call(raw, 'image_url')
+  var imageUrl = ''
+  if (Object.prototype.hasOwnProperty.call(raw, 'imageUrl')) {
+    imageUrl = String(raw.imageUrl || '').trim()
+  } else if (Object.prototype.hasOwnProperty.call(raw, 'image_url')) {
+    imageUrl = String(raw.image_url || '').trim()
+  }
+
   return {
     hadBrand: hadBrand,
+    hadImageUrl: hadImageUrl,
     item: {
       id: String(raw.id || '').trim(),
       name: name,
@@ -232,6 +272,7 @@ function normalizeIncoming_(raw) {
       updatedAt: parseSyncTimestamp(raw.updatedAt, now),
       deleted: isDeletedFlag(raw.deleted),
       brand: brand,
+      imageUrl: imageUrl,
     },
   }
 }
@@ -251,6 +292,7 @@ function itemToRow_(item) {
     parseSyncTimestamp(item.updatedAt, Date.now()),
     item.deleted ? 'TRUE' : '',
     item.brand != null ? String(item.brand) : '',
+    item.imageUrl != null ? String(item.imageUrl) : '',
   ]
 }
 
@@ -271,6 +313,7 @@ function writeAllItems_(sheet, items) {
   sheet.getRange(2, TEXT_COLUMNS.expiryDate, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, TEXT_COLUMNS.barcode, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, TEXT_COLUMNS.brand, numRows, 1).setNumberFormat('@')
+  sheet.getRange(2, TEXT_COLUMNS.imageUrl, numRows, 1).setNumberFormat('@')
   sheet.getRange(2, 10, numRows, 1).setNumberFormat('0')
   sheet.getRange(2, 11, numRows, 1).setNumberFormat('0')
 
@@ -313,6 +356,40 @@ function assignBlankIds_(sheet, items) {
 /**
  * Bump updatedAt when a human edits item fields in the sheet UI (not header row).
  */
+/**
+ * One-off: fill column N (image_url) for rows that have a barcode in the bundled map.
+ * Set THUMB_BASE to your deployed app origin before running (Extensions → Apps Script → Run).
+ * Do not run against production without reviewing a copy of the sheet first.
+ */
+function backfillImageUrls() {
+  var THUMB_BASE = 'https://vinboy88.github.io/Pantry-tracker-/thumbs/'
+  var THUMB_BARCODE_SLUG = {
+    '8410660098804': 'la-espanola-olive-oil',
+  }
+  var lock = LockService.getScriptLock()
+  if (!lock.tryLock(30000)) {
+    throw new Error('Could not acquire lock')
+  }
+  try {
+    var sheet = getItemsSheet_()
+    ensureHeader_(sheet)
+    var items = readAllItems_(sheet)
+    var changed = false
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i]
+      if (item.imageUrl) continue
+      var code = String(item.barcode || '').trim()
+      var slug = code ? THUMB_BARCODE_SLUG[code] : null
+      if (!slug) continue
+      item.imageUrl = THUMB_BASE + slug + '.jpg'
+      changed = true
+    }
+    if (changed) writeAllItems_(sheet, items)
+  } finally {
+    lock.releaseLock()
+  }
+}
+
 function onEdit(e) {
   if (!e || !e.range) return
   var sheet = e.range.getSheet()

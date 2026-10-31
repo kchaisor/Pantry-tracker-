@@ -167,9 +167,12 @@ export default function App() {
   useEffect(() => {
     if (!pantry.ready) return
     for (const item of pantry.items) {
-      void enrichThumbnailInBackground(item, lookupProduct, searchProductByName)
+      void enrichThumbnailInBackground(item, lookupProduct, searchProductByName, (url) => {
+        if (item.imageUrl?.trim() === url.trim()) return
+        void pantry.updateImageUrl(item.id, url)
+      })
     }
-  }, [pantry.ready, pantry.items])
+  }, [pantry.ready, pantry.items, pantry.updateImageUrl])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -345,7 +348,11 @@ export default function App() {
   }
 
   const savePostScan = async (draft: ItemDraft, packSize: number | null) => {
-    const result = await pantry.addItem(draft)
+    const imageUrl =
+      postScan?.imageUrl?.trim() ||
+      resolveThumbnailByBarcode(draft.barcode) ||
+      undefined
+    const result = await pantry.addItem(draft, { imageUrl })
     if (packSize != null && packSize > 0) {
       writePackSizeOverride(result.item.id, packSize)
     }
@@ -356,7 +363,7 @@ export default function App() {
       isLiquid: false,
       volumeMl: null,
       volumeUnknown: false,
-      imageUrl: resolveThumbnailByBarcode(draft.barcode) ?? undefined,
+      imageUrl: imageUrl ?? undefined,
     }, result.item.id)
     setPostScan(null)
     setToast(`Added ${result.item.name}`)
