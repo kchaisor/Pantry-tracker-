@@ -362,7 +362,7 @@ function assignBlankIds_(sheet, items) {
  * Do not run against production without reviewing a copy of the sheet first.
  */
 function backfillImageUrls() {
-  var THUMB_BASE = 'https://vinboy88.github.io/Pantry-tracker-/thumbs/'
+  var THUMB_BASE = 'https://kchaisor.github.io/Pantry-tracker-/thumbs/'
   var THUMB_BARCODE_SLUG = {
     '8410660098804': 'la-espanola-olive-oil',
   }

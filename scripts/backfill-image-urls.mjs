@@ -20,7 +20,7 @@ const catalogSource = readFileSync(join(root, 'src/lib/thumbnailCatalog.ts'), 'u
 
 const THUMB_BASE =
   process.env.PANTRY_THUMB_BASE?.replace(/\/?$/, '/') ||
-  'https://vinboy88.github.io/Pantry-tracker-/thumbs/'
+  'https://kchaisor.github.io/Pantry-tracker-/thumbs/'
 
 function parseRecordMap(exportName) {
   const marker = `export const ${exportName}`

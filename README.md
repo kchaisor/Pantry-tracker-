@@ -45,7 +45,7 @@ HTTPS is required (GitHub Pages already is). The first Scan tap shows a short �
 - Don’t Allow: Pantry says so and offers retry plus typing the digits.
 - To turn the camera back on after Don’t Allow:
   - Home Screen app: **Settings → Pantry → Camera → Allow**
-  - Safari tab: **Settings → Safari → Camera** (or the site settings for `vinboy88.github.io`)
+  - Safari tab: **Settings → Safari → Camera** (or the site settings for `kchaisor.github.io`)
 - Then open Scan and tap **Try camera again**.
 
 Hold the barcode in the box with decent light. 1D grocery codes need to be reasonably large in the frame. Nothing from the camera is uploaded. A new item may request a product name from Open Food Facts; that is network-only and fails silently if you are offline.
@@ -117,7 +117,7 @@ Safari can erase website data after unused time, especially if Pantry is **not**
 
 After this repo is merged to `main` and Pages is enabled, the app is at:
 
-**https://vinboy88.github.io/Pantry-tracker-/**
+**https://kchaisor.github.io/Pantry-tracker-/**
 
 The repository name ends with a hyphen (`Pantry-tracker-`). That hyphen is part of the URL.
 
@@ -180,7 +180,7 @@ Safari can install this as a Home Screen app. **HTTPS is required** (a raw LAN I
 ### Option A — GitHub Pages (no PC after merge)
 
 1. Enable Pages once (see [One-time setup](#one-time-setup-required) above) and wait for the `Deploy GitHub Pages` workflow on `main` to finish.
-2. On the iPhone, open **https://vinboy88.github.io/Pantry-tracker-/** in **Safari** (not Chrome).
+2. On the iPhone, open **https://kchaisor.github.io/Pantry-tracker-/** in **Safari** (not Chrome).
 3. Tap **Share** → **Add to Home Screen**.
 4. Keep the name **Pantry**, then tap **Add**.
 5. Open it from the Home Screen. It launches full-screen, without Safari chrome.
