@@ -12,7 +12,7 @@ const SIZE_PX: Record<ThumbSize, number> = {
 }
 
 interface ProductThumbProps {
-  item?: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category'>
+  item?: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>
   name?: string
   imageUrl?: string | null
   size?: ThumbSize

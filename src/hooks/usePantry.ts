@@ -8,6 +8,7 @@ import { sampleItems } from '../lib/sampleData.ts'
 import { isLowStock } from '../lib/stock.ts'
 import { deleteItem, loadItems, replaceAll, saveItem } from '../lib/storage.ts'
 import { newId, normalizeItem } from '../lib/backup.ts'
+import { resolveCanonicalImageUrl } from '../lib/thumbnails.ts'
 import { visiblePantryItems } from '../lib/syncMerge.ts'
 import type { ItemDraft, LastAddPrefs, PantryItem } from '../types.ts'
 
@@ -39,9 +40,13 @@ export function draftFromItem(item: PantryItem): ItemDraft {
   }
 }
 
-function itemFromDraft(draft: ItemDraft, existing?: PantryItem): PantryItem {
+function itemFromDraft(
+  draft: ItemDraft,
+  existing?: PantryItem,
+  extras?: { imageUrl?: string | null },
+): PantryItem {
   const now = Date.now()
-  return {
+  const base: PantryItem = {
     id: existing?.id ?? newId(),
     name: draft.name.trim(),
     brand: draft.brand.trim(),
@@ -55,6 +60,11 @@ function itemFromDraft(draft: ItemDraft, existing?: PantryItem): PantryItem {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
+  const explicit = extras?.imageUrl?.trim()
+  if (explicit) return { ...base, imageUrl: explicit }
+  if (existing?.imageUrl?.trim()) return { ...base, imageUrl: existing.imageUrl.trim() }
+  const resolved = resolveCanonicalImageUrl(base)
+  return resolved ? { ...base, imageUrl: resolved } : base
 }
 
 function rememberAdd(item: PantryItem): void {
@@ -116,23 +126,29 @@ export function usePantry() {
   )
 
   const addItem = useCallback(
-    async (draft: ItemDraft) => {
+    async (draft: ItemDraft, extras?: { imageUrl?: string | null }) => {
       const barcodeMatch = findBarcodeMatch(itemsRef.current, draft.barcode)
       const match = barcodeMatch ?? findNameMatch(itemsRef.current, draft.name)
       if (match) {
         const addBy = clampQuantity(draft.quantity) || 1
+        const imageUrl =
+          match.imageUrl?.trim() ||
+          extras?.imageUrl?.trim() ||
+          resolveCanonicalImageUrl(match) ||
+          undefined
         const item: PantryItem = {
           ...match,
           quantity: clampQuantity(match.quantity + addBy),
           barcode: match.barcode || normalizeBarcode(draft.barcode),
           updatedAt: Date.now(),
+          ...(imageUrl ? { imageUrl } : {}),
         }
         await upsert(item)
         rememberAdd(item)
         return { item, bumped: true as const, addedBy: addBy }
       }
 
-      const item = itemFromDraft(draft)
+      const item = itemFromDraft(draft, undefined, extras)
       await upsert(item)
       rememberAdd(item)
       return { item, bumped: false as const, addedBy: item.quantity }
@@ -276,6 +292,18 @@ export function usePantry() {
     setItems(setVisibleItems(merged))
   }, [])
 
+  const updateImageUrl = useCallback(
+    async (id: string, imageUrl: string) => {
+      const url = imageUrl.trim()
+      if (!url) return null
+      return patchItem(id, (existing) => {
+        if (existing.imageUrl === url) return existing
+        return { ...existing, imageUrl: url, updatedAt: Date.now() }
+      })
+    },
+    [patchItem],
+  )
+
   const stats = useMemo(
     () => ({
       total: items.length,
@@ -303,5 +331,6 @@ export function usePantry() {
     mergeItems,
     setLocalChangeHandler,
     refreshFromSync,
+    updateImageUrl,
   }
 }

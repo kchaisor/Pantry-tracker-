@@ -64,6 +64,25 @@ assert.equal(postMerged[0].brand, 'KeepMe')
 const postWithBrand = mergePostItems(a, [{ hadBrand: true, item: { ...b[0], brand: 'Posted' } }])
 assert.equal(postWithBrand[0].brand, 'Posted')
 
+const sheetWithImage = [{ ...a[0], imageUrl: 'https://example.com/keep.jpg' }]
+const incomingNoImage = {
+  ...b[0],
+  imageUrl: '',
+}
+const postKeepImage = mergePostItems(sheetWithImage, [
+  { hadBrand: false, hadImageUrl: false, item: incomingNoImage },
+])
+assert.equal(postKeepImage[0].imageUrl, 'https://example.com/keep.jpg')
+
+const postWithImage = mergePostItems(sheetWithImage, [
+  {
+    hadBrand: false,
+    hadImageUrl: true,
+    item: { ...incomingNoImage, imageUrl: 'https://example.com/new.jpg' },
+  },
+])
+assert.equal(postWithImage[0].imageUrl, 'https://example.com/new.jpg')
+
 // #1: null rows from blank-name sheet lines must not crash merge
 const withNull = mergeSyncItems([null, a[0]], b)
 assert.equal(withNull.length, 1)

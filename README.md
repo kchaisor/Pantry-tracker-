@@ -45,7 +45,7 @@ HTTPS is required (GitHub Pages already is). The first Scan tap shows a short �
 - Don’t Allow: Pantry says so and offers retry plus typing the digits.
 - To turn the camera back on after Don’t Allow:
   - Home Screen app: **Settings → Pantry → Camera → Allow**
-  - Safari tab: **Settings → Safari → Camera** (or the site settings for `vinboy88.github.io`)
+  - Safari tab: **Settings → Safari → Camera** (or the site settings for `kchaisor.github.io`)
 - Then open Scan and tap **Try camera again**.
 
 Hold the barcode in the box with decent light. 1D grocery codes need to be reasonably large in the frame. Nothing from the camera is uploaded. A new item may request a product name from Open Food Facts; that is network-only and fails silently if you are offline.
@@ -74,6 +74,19 @@ Pantry can sync with a shared Google Sheet so a separate bot (or human) can read
 6. In Pantry **Settings** → **Sheet sync**, paste that full URL and tap **Save sync URL**. Use **Sync now** to verify.
 
 After deploy, add an `onEdit` trigger if you want sheet UI edits to bump `updatedAt` automatically: Apps Script → **Triggers** → add `onEdit` for the spreadsheet (the simple trigger in `Code.gs` runs for the editor only; an installable trigger is optional for bots).
+
+### Updating the Apps Script (new sheet columns)
+
+When sync adds a column (for example **`image_url`** in column **N**), update the script files in the Apps Script project from this repo, then **Deploy** → **Manage deployments** → edit the existing web app deployment → **Version: New version** → **Deploy**. Keep the same deployment URL so Pantry’s saved sync URL keeps working; only the script version changes.
+
+### Product images (`image_url`)
+
+Column **N** stores each item’s product photo URL (same source as in-app thumbnails: bundled photos or Open Food Facts). The app syncs it as **`imageUrl`** on POST; **GET** (Home Assistant / bots) returns **`image_url`** on each item. Older app versions that omit `imageUrl` on POST do not clear an existing cell (same behavior as **`brand`** in column M).
+
+**Backfill existing sheet rows (one-off):**
+
+1. **Dry-run locally:** `node scripts/backfill-image-urls.mjs path/to/export.json` — prints suggested `image_url` values from the bundled slug map (does not touch Google).
+2. **On a sheet copy:** Apps Script → open `backfillImageUrls()` in `Code.gs`, set `THUMB_BASE` to your deployed app URL, run on the copy, verify column N, then repeat on production if needed.
 
 ### Bots editing the sheet directly
 
@@ -104,7 +117,7 @@ Safari can erase website data after unused time, especially if Pantry is **not**
 
 After this repo is merged to `main` and Pages is enabled, the app is at:
 
-**https://vinboy88.github.io/Pantry-tracker-/**
+**https://kchaisor.github.io/Pantry-tracker-/**
 
 The repository name ends with a hyphen (`Pantry-tracker-`). That hyphen is part of the URL.
 
@@ -167,7 +180,7 @@ Safari can install this as a Home Screen app. **HTTPS is required** (a raw LAN I
 ### Option A — GitHub Pages (no PC after merge)
 
 1. Enable Pages once (see [One-time setup](#one-time-setup-required) above) and wait for the `Deploy GitHub Pages` workflow on `main` to finish.
-2. On the iPhone, open **https://vinboy88.github.io/Pantry-tracker-/** in **Safari** (not Chrome).
+2. On the iPhone, open **https://kchaisor.github.io/Pantry-tracker-/** in **Safari** (not Chrome).
 3. Tap **Share** → **Add to Home Screen**.
 4. Keep the name **Pantry**, then tap **Add**.
 5. Open it from the Home Screen. It launches full-screen, without Safari chrome.

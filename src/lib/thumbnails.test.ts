@@ -104,6 +104,26 @@ describe('localStorage pantry.itemThumbnails', () => {
     }
     persistItemThumbnail({ id: 'x', url: bundledThumbUrl('moro-olive-oil') })
     const sync = pantryToSyncItem(item)
+    const itemWithImage: PantryItem = { ...item, imageUrl: bundledThumbUrl('moro-olive-oil') }
+    const syncWithImage = pantryToSyncItem(itemWithImage)
+    expect(Object.keys(syncWithImage).sort()).toEqual(
+      [
+        'barcode',
+        'brand',
+        'category',
+        'createdAt',
+        'deleted',
+        'expiryDate',
+        'id',
+        'imageUrl',
+        'lowStockThreshold',
+        'name',
+        'notes',
+        'quantity',
+        'unit',
+        'updatedAt',
+      ].sort(),
+    )
     expect(Object.keys(sync).sort()).toEqual(
       [
         'barcode',

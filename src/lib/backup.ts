@@ -69,6 +69,7 @@ export function normalizeItem(raw: unknown, now = Date.now()): PantryItem | null
     notes: asString(row.notes).trim(),
     lowStockThreshold: asThreshold(row.lowStockThreshold),
     barcode: normalizeBarcode(asString(row.barcode)),
+    imageUrl: asString(row.imageUrl ?? row.image_url).trim() || undefined,
     createdAt: asTimestamp(row.createdAt, now),
     updatedAt: asTimestamp(row.updatedAt, now),
   }
