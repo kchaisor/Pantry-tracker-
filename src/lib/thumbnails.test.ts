@@ -6,8 +6,11 @@ import { pantryToSyncItem } from './syncMerge.ts'
 import { bundledThumbUrl, THUMB_BARCODE_SLUG } from './thumbnailCatalog.ts'
 import {
   ITEM_THUMBNAILS_KEY,
+  USER_ITEM_PHOTOS_KEY,
+  isUserCapturedImageUrl,
   persistItemThumbnail,
   readThumbnailStore,
+  readUserPhotoStore,
   resolveItemThumbnail,
   resolveThumbnailByBarcode,
   resolveThumbnailByName,
@@ -81,10 +84,34 @@ describe('localStorage pantry.itemThumbnails', () => {
       createdAt: 0,
       updatedAt: 0,
     }
-    expect(resolveItemThumbnail(item)).toBe('https://example.com/img.jpg')
-    expect(resolveThumbnailByName('La Española Extra Virgin Olive Oil')).toBe(
-      'https://example.com/img.jpg',
+    expect(resolveItemThumbnail(item)).toBe(bundledThumbUrl('la-espanola-olive-oil'))
+    expect(resolveThumbnailByBarcode('8410660098804')).toBe(
+      bundledThumbUrl('la-espanola-olive-oil'),
     )
+    expect(resolveThumbnailByName('La Española Extra Virgin Olive Oil')).toBe(
+      bundledThumbUrl('la-espanola-olive-oil'),
+    )
+  })
+
+  it('treats custom sheet URLs on catalog items as user photos', () => {
+    const item: PantryItem = {
+      id: '9d5fa6d4-4b67-46d8-9307-4ee4934e6b7c',
+      name: 'Chung Jung One Seasoned Bean Paste (Ssamjang)',
+      brand: '',
+      quantity: 1,
+      unit: 'g',
+      category: 'Kitchen',
+      expiryDate: null,
+      notes: '',
+      lowStockThreshold: null,
+      barcode: '',
+      imageUrl: 'https://example.com/kelvin-kitchen.jpg',
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    expect(isUserCapturedImageUrl(item.imageUrl!, item)).toBe(true)
+    expect(resolveItemThumbnail(item)).toBe(bundledThumbUrl('chung-jung-ssamjang'))
+    expect(readUserPhotoStore()[item.id]).toBe('https://example.com/kelvin-kitchen.jpg')
   })
 
   it('does not mutate SyncItem / sheet payload keys', () => {

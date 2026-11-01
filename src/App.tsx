@@ -150,9 +150,14 @@ export default function App() {
   useEffect(() => {
     if (!pantry.ready || fixtureLoaded.current) return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('fixture') !== 'live') return
+    const fixture = params.get('fixture')
+    if (fixture !== 'live' && fixture !== 'thumb-compare') return
     fixtureLoaded.current = true
-    void fetch(`${import.meta.env.BASE_URL}fixtures/pantry-live-items.json`)
+    const file =
+      fixture === 'thumb-compare'
+        ? 'fixtures/pantry-thumb-compare.json'
+        : 'fixtures/pantry-live-items.json'
+    void fetch(`${import.meta.env.BASE_URL}${file}`)
       .then((res) => res.json())
       .then((body: { items?: unknown[] }) => {
         if (Array.isArray(body.items)) {
