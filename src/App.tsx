@@ -266,7 +266,9 @@ export default function App() {
     const found = await lookupProduct(code)
     if (found) cacheLookupThumbnail(code, found)
     const merged = found ? applyLookupToDraft(seed, found) : seed
-    const imageUrl = found?.imageUrl ?? resolveThumbnailByBarcode(code)
+    const imageUrl =
+      (found?.imageUrl?.trim() ? found.imageUrl.trim() : null) ??
+      resolveThumbnailByBarcode(code)
     setPostScan((current) => {
       if (!current || current.draft.barcode !== code) return current
       return {
