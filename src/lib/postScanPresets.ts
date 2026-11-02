@@ -1,22 +1,14 @@
 import { addDaysIso } from './dates.ts'
+import { EXPIRY_QUICK_CHIPS } from './expiryQuickChips.ts'
 
-export type ExpiryPresetId =
-  | '+3d'
-  | '+1w'
-  | '+1m'
-  | '+3m'
-  | '+6m'
-  | '+1y'
-  | 'none'
+export type ExpiryPresetId = (typeof EXPIRY_QUICK_CHIPS)[number]['id'] | 'clear'
 
 const PRESET_DAYS: Record<ExpiryPresetId, number | null> = {
   '+3d': 3,
   '+1w': 7,
   '+1m': 30,
-  '+3m': 90,
   '+6m': 180,
-  '+1y': 365,
-  none: null,
+  clear: null,
 }
 
 export function expiryPresetDays(preset: ExpiryPresetId, from?: string): string {
@@ -26,13 +18,8 @@ export function expiryPresetDays(preset: ExpiryPresetId, from?: string): string 
 }
 
 export const EXPIRY_PRESETS: { id: ExpiryPresetId; label: string }[] = [
-  { id: '+3d', label: '+3d' },
-  { id: '+1w', label: '+1w' },
-  { id: '+1m', label: '+1m' },
-  { id: '+3m', label: '+3m' },
-  { id: '+6m', label: '+6m' },
-  { id: '+1y', label: '+1y' },
-  { id: 'none', label: 'No expiry' },
+  ...EXPIRY_QUICK_CHIPS.map((c) => ({ id: c.id, label: c.label })),
+  { id: 'clear', label: 'Clear' },
 ]
 
 export const ZONE_PRESETS = ['Pantry', 'Fridge', 'Freezer', 'Household'] as const

@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from 'react'
-import { addDaysIso } from '../lib/dates.ts'
+import { useEffect, useId, useRef, useState } from 'react'
+import { suggestedExpiryForCategory } from '../lib/categoryShelfLife.ts'
 import {
   EXPIRY_PRESETS,
   expiryPresetDays,
@@ -14,6 +14,7 @@ import {
   quantityForFraction,
   type FillFraction,
 } from '../lib/packSize.ts'
+import { runExpiryOcrOnFile } from '../lib/runExpiryOcr.ts'
 import { formatQuantity } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { ItemDraft } from '../types.ts'
@@ -28,9 +29,8 @@ interface PostScanSheetProps {
   gs1ExpiryApplied?: boolean
   onClose: () => void
   onSave: (draft: ItemDraft, packSize: number | null) => Promise<void>
-  onMoreDetails: () => void
+  onMoreDetails: (draft: ItemDraft) => void
   onPickDate: () => void
-  onScanExpiryOcr: () => void
 }
 
 const FILL_LABELS: Record<FillFraction, string> = {
@@ -52,17 +52,39 @@ export function PostScanSheet({
   onSave,
   onMoreDetails,
   onPickDate,
-  onScanExpiryOcr,
 }: PostScanSheetProps) {
   const titleId = useId()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [zone, setZone] = useState<ZonePreset>(() => mapCategoryToZone(draft.category))
   const [fill, setFill] = useState<FillFraction>(1)
   const [expiry, setExpiry] = useState(draft.expiryDate)
+  const [expirySuggested, setExpirySuggested] = useState(false)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrPick, setOcrPick] = useState<{ best: string; alternatives: string[] } | null>(null)
+  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setExpiry(draft.expiryDate)
-  }, [draft.expiryDate])
+    if (gs1ExpiryApplied && draft.expiryDate) {
+      setExpirySuggested(false)
+    }
+  }, [draft.expiryDate, gs1ExpiryApplied])
+
+  useEffect(() => {
+    if (gs1ExpiryApplied) return
+    if (draft.expiryDate && !expirySuggested) return
+    const cat = draft.category.trim()
+    if (!cat) return
+    const next = suggestedExpiryForCategory(cat)
+    if (next && next !== expiry) {
+      setExpiry(next)
+      setExpirySuggested(true)
+    } else if (!next && expirySuggested) {
+      setExpiry('')
+      setExpirySuggested(false)
+    }
+  }, [draft.category, draft.expiryDate, expiry, expirySuggested, gs1ExpiryApplied])
 
   const unit = draft.unit || 'ml'
   const packSize =
@@ -88,6 +110,35 @@ export function PostScanSheet({
       ? `${formatQuantity(packSizeFromVolumeMl(volumeMl, unit))} ${unitLabel(unit)}`
       : null
 
+  const applyExpiry = (iso: string, suggested = false) => {
+    setExpiry(iso)
+    setExpirySuggested(suggested)
+    setOcrPick(null)
+    setOcrNotice(null)
+  }
+
+  const onPhotoSelected = async (file: File | undefined) => {
+    if (!file) return
+    setOcrBusy(true)
+    setOcrNotice(null)
+    setOcrPick(null)
+    try {
+      const result = await runExpiryOcrOnFile(file)
+      if (result.status === 'error') {
+        setOcrNotice(result.message)
+        return
+      }
+      if (result.status === 'empty') {
+        setOcrNotice('No date found on the photo — try a closer shot of the expiry line.')
+        return
+      }
+      setOcrPick({ best: result.best, alternatives: result.alternatives })
+    } finally {
+      setOcrBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   const submit = async () => {
     setBusy(true)
     try {
@@ -106,6 +157,8 @@ export function PostScanSheet({
       setBusy(false)
     }
   }
+
+  const showSuggested = expirySuggested && expiry && !gs1ExpiryApplied
 
   return (
     <div className="sheet-root" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -173,54 +226,93 @@ export function PostScanSheet({
           </div>
         </div>
 
-        <div className="post-scan-section">
+        <div
+          className={`post-scan-section expiry-block ${highlightExpiry ? 'expiry-block--scan' : ''} ${showSuggested ? 'expiry-block--suggested' : ''}`}
+        >
           <p className="post-scan-label">Expiry</p>
           {gs1ExpiryApplied && expiry ? (
             <p className="form-hint">From GS1 barcode: {expiry}</p>
+          ) : showSuggested ? (
+            <p className="form-hint expiry-suggest-hint">
+              Suggested {expiry} from category — change, tap a chip, or scan the pack.
+            </p>
+          ) : highlightExpiry && !expiry ? (
+            <p className="form-hint">Pick a preset, photo, or calendar date.</p>
+          ) : expiry ? (
+            <p className="form-hint">Expires {expiry}</p>
           ) : null}
-          {highlightExpiry && !expiry ? (
-            <p className="form-hint">Pick a preset or scan the date on pack.</p>
-          ) : null}
-          <div className="chips wrap">
+          <div className="chips wrap expiry-quick-chips">
             {EXPIRY_PRESETS.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
-                className={`chip ${preset.id === 'none' && !expiry ? 'is-on' : ''}`}
-                onClick={() => setExpiry(expiryPresetDays(preset.id))}
+                className={`chip expiry-chip ${preset.id === 'clear' && !expiry ? 'is-on' : ''}`}
+                onClick={() => applyExpiry(expiryPresetDays(preset.id), false)}
               >
                 {preset.label}
               </button>
             ))}
-            <button type="button" className="chip" onClick={onScanExpiryOcr}>
-              📷 Scan Date (OCR)
-            </button>
             <button
               type="button"
-              className="chip"
-              onClick={() => {
-                onPickDate()
-              }}
+              className="chip expiry-chip"
+              disabled={ocrBusy}
+              onClick={() => fileRef.current?.click()}
             >
+              {ocrBusy ? 'Reading…' : 'Photo'}
+            </button>
+            <button type="button" className="chip expiry-chip" onClick={() => onPickDate()}>
               Pick date…
             </button>
           </div>
-          {expiry ? <p className="form-hint">Expires {expiry}</p> : null}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(event) => void onPhotoSelected(event.target.files?.[0])}
+          />
+          {ocrNotice ? <p className="form-hint">{ocrNotice}</p> : null}
+          {ocrPick ? (
+            <div className="expiry-ocr-confirm" role="group" aria-label="Confirm scanned expiry">
+              <p className="form-hint">Found on pack — confirm before saving:</p>
+              <div className="chips wrap">
+                <button type="button" className="chip is-on" onClick={() => applyExpiry(ocrPick.best, false)}>
+                  {ocrPick.best}
+                </button>
+                {ocrPick.alternatives.map((alt) => (
+                  <button key={alt} type="button" className="chip" onClick={() => applyExpiry(alt, false)}>
+                    {alt}
+                  </button>
+                ))}
+                <button type="button" className="chip" onClick={() => setOcrPick(null)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <button type="button" className="primary-btn post-scan-save" disabled={busy || !draft.name.trim()} onClick={() => void submit()}>
           Save to Pantry (1 Tap)
         </button>
 
-        <button type="button" className="text-btn post-scan-more" onClick={onMoreDetails}>
+        <button
+          type="button"
+          className="text-btn post-scan-more"
+          onClick={() =>
+            onMoreDetails({
+              ...draft,
+              category: zone,
+              expiryDate: expiry,
+            })
+          }
+        >
           More details (category, threshold, notes…)
         </button>
       </section>
     </div>
   )
-}
-
-/** Hidden date input helper for pick-date flow from parent. */
-export function hiddenDateDefault(): string {
-  return addDaysIso(30)
 }

@@ -9,10 +9,8 @@ describe('post-scan expiry presets', () => {
     { id: '+3d', days: 3 },
     { id: '+1w', days: 7 },
     { id: '+1m', days: 30 },
-    { id: '+3m', days: 90 },
     { id: '+6m', days: 180 },
-    { id: '+1y', days: 365 },
-    { id: 'none', days: null },
+    { id: 'clear', days: null },
   ]
 
   for (const { id, days } of cases) {
