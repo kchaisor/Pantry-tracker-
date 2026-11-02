@@ -93,7 +93,7 @@ export default function App() {
   })
   const [postScan, setPostScan] = useState<PostScanState | null>(null)
   const [incomingBarcode, setIncomingBarcode] = useState<string | null>(null)
-  const [scannerMode, setScannerMode] = useState<'lookup' | 'attach' | 'expiry-ocr' | null>(null)
+  const [scannerMode, setScannerMode] = useState<'lookup' | 'attach' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showWelcome, setShowWelcome] = useState(() => !readFlag(WELCOME_KEY))
   const [showInstallHint, setShowInstallHint] = useState(
@@ -318,11 +318,6 @@ export default function App() {
       return
     }
 
-    if (mode === 'expiry-ocr') {
-      setToast('OCR expiry: use full editor to confirm the scanned date.')
-      return
-    }
-
     const match = findBarcodeMatch(pantry.items, code)
     if (match) {
       const after = await pantry.adjustQuantity(match.id, 1)
@@ -531,8 +526,8 @@ export default function App() {
           gs1ExpiryApplied={postScan.gs1ExpiryApplied}
           onClose={() => setPostScan(null)}
           onSave={savePostScan}
-          onMoreDetails={() => {
-            openNew(postScan.draft)
+          onMoreDetails={(draft) => {
+            openNew(draft)
             setLookupStatus(postScan.lookupStatus)
             setScanHints({
               highlightExpiry: postScan.highlightExpiry,
@@ -542,12 +537,6 @@ export default function App() {
             setPostScan(null)
           }}
           onPickDate={() => datePickRef.current?.showPicker?.() ?? datePickRef.current?.click()}
-          onScanExpiryOcr={() => {
-            setScannerMode('expiry-ocr')
-            openNew(postScan.draft)
-            setScanHints((h) => ({ ...h, highlightExpiry: true }))
-            setPostScan(null)
-          }}
         />
       ) : null}
 
@@ -581,7 +570,7 @@ export default function App() {
         />
       ) : null}
 
-      {scannerMode && scannerMode !== 'expiry-ocr' ? (
+      {scannerMode ? (
         <BarcodeScanner
           onClose={() => setScannerMode(null)}
           onDetect={(code) => void onScannedBarcode(code)}

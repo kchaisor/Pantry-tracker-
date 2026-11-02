@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { CATEGORIES, DEFAULT_LOW_STOCK_THRESHOLD, UNITS } from '../constants.ts'
 import { draftFromItem, emptyDraft } from '../hooks/usePantry.ts'
 import { findBarcodeMatch, normalizeBarcode } from '../lib/barcode.ts'
-import { addDaysIso } from '../lib/dates.ts'
+import { ExpiryField } from './ExpiryField.tsx'
 import { findNameMatch, formatQuantity, uniqueBrands } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
 import { inferPackSize, isContinuousUnit, readPackSizeOverride, writePackSizeOverride } from '../lib/packSize.ts'
@@ -412,48 +412,16 @@ export function ItemEditor({
             {DEFAULT_LOW_STOCK_THRESHOLD}. Set 0 to skip the low badge (Out still shows at 0).
           </p>
 
-          <div
-            className={`expiry-block ${highlightExpiry ? 'expiry-block--scan' : ''}`}
-            data-scan-expiry={highlightExpiry ? 'true' : undefined}
-          >
-            <label>
-              Expiry / best before
-              <input
-                ref={expiryRef}
-                type="date"
-                value={draft.expiryDate}
-                onChange={(event) => {
-                  setField('expiryDate', event.target.value)
-                  onDismissScanHints?.()
-                }}
-              />
-            </label>
-            {gs1ExpiryApplied && draft.expiryDate ? (
-              <p className="form-hint">Expiry from GS1 barcode (AI 17).</p>
-            ) : highlightExpiry ? (
-              <p className="form-hint">Plain barcodes do not include expiry — pick a date.</p>
-            ) : null}
-            <div className="chips wrap" aria-label="Expiry shortcuts">
-              {[
-                { label: '+1 wk', days: 7 },
-                { label: '+1 mo', days: 30 },
-                { label: '+3 mo', days: 90 },
-              ].map((shortcut) => (
-                <button
-                  key={shortcut.label}
-                  type="button"
-                  className="chip"
-                  onClick={() => {
-                    setField('expiryDate', addDaysIso(shortcut.days))
-                    onDismissScanHints?.()
-                    expiryRef.current?.focus()
-                  }}
-                >
-                  {shortcut.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ExpiryField
+            value={draft.expiryDate}
+            category={categoryValue}
+            allowSuggestion={!item}
+            gs1Applied={gs1ExpiryApplied}
+            highlightScan={highlightExpiry}
+            inputRef={expiryRef}
+            onDismissScanHints={onDismissScanHints}
+            onChange={(iso) => setField('expiryDate', iso)}
+          />
 
           <label>
             Notes

@@ -778,6 +778,42 @@ textarea:focus-visible {
   box-shadow: 0 0 0 1px rgba(154, 107, 18, 0.12);
 }
 
+.expiry-block--suggested {
+  border-color: color-mix(in srgb, var(--sage) 55%, var(--line));
+  background: var(--sage-soft);
+}
+
+.expiry-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.expiry-label-row {
+  display: grid;
+  gap: 6px;
+}
+
+.expiry-input-suggested {
+  border-color: var(--sage-strong);
+  background: color-mix(in srgb, var(--sage-soft) 70%, var(--surface));
+}
+
+.expiry-suggest-hint {
+  color: var(--sage-strong);
+}
+
+.expiry-quick-chips .expiry-chip {
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.expiry-photo-btn {
+  min-height: 44px;
+  min-width: 64px;
+}
+
 .card-brand {
   font-weight: 650;
   color: var(--ink);
