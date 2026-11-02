@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && GITHUB_PAGES=true vite build",
     "lint": "oxlint",
-    "test": "vitest run && node scripts/test-gas-merge.mjs",
+    "test": "vitest run && node scripts/test-gas-merge.mjs && node --test scripts/expiryScreenshotVerify.test.mjs",
     "preview": "vite preview",
     "icons": "python3 scripts/generate-icons.py"
   },
