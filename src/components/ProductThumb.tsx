@@ -75,8 +75,13 @@ export function ProductThumb({
   const [broken, setBroken] = useState(false)
 
   const src = useMemo(() => {
+    if (item) {
+      return resolveItemThumbnail({
+        ...item,
+        imageUrl: imageUrl?.trim() || item.imageUrl,
+      })
+    }
     if (imageUrl?.trim()) return imageUrl.trim()
-    if (item) return resolveItemThumbnail(item)
     if (name) return resolveThumbnailByName(name)
     return null
   }, [imageUrl, item, name])

@@ -150,9 +150,14 @@ export default function App() {
   useEffect(() => {
     if (!pantry.ready || fixtureLoaded.current) return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('fixture') !== 'live') return
+    const fixture = params.get('fixture')
+    if (fixture !== 'live' && fixture !== 'thumb-compare') return
     fixtureLoaded.current = true
-    void fetch(`${import.meta.env.BASE_URL}fixtures/pantry-live-items.json`)
+    const file =
+      fixture === 'thumb-compare'
+        ? 'fixtures/pantry-thumb-compare.json'
+        : 'fixtures/pantry-live-items.json'
+    void fetch(`${import.meta.env.BASE_URL}${file}`)
       .then((res) => res.json())
       .then((body: { items?: unknown[] }) => {
         if (Array.isArray(body.items)) {
@@ -266,7 +271,9 @@ export default function App() {
     const found = await lookupProduct(code)
     if (found) cacheLookupThumbnail(code, found)
     const merged = found ? applyLookupToDraft(seed, found) : seed
-    const imageUrl = found?.imageUrl ?? resolveThumbnailByBarcode(code)
+    const imageUrl =
+      (found?.imageUrl?.trim() ? found.imageUrl.trim() : null) ??
+      resolveThumbnailByBarcode(code)
     setPostScan((current) => {
       if (!current || current.draft.barcode !== code) return current
       return {
