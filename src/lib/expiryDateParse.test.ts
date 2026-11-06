@@ -55,4 +55,20 @@ describe('parseExpiryDatesFromText', () => {
   it('parses multiline noisy label', () => {
     expect(bestExpiryFromText('UB\n14  APR  27').best).toBe('2027-04-14')
   })
+
+  it('parses inkjet-style spaced digits (AU day-first)', () => {
+    expect(bestExpiryFromText('15 12 26').best).toBe('2026-12-15')
+    expect(bestExpiryFromText('Best before 15 12 26').best).toBe('2026-12-15')
+  })
+
+  it('parses common AU supermarket phrasing', () => {
+    expect(bestExpiryFromText('USE BY 15 DEC 2026').best).toBe('2026-12-15')
+    expect(bestExpiryFromText('BEST BEFORE 15/12/26').best).toBe('2026-12-15')
+    expect(bestExpiryFromText('EXP 151226').best).toBe('2026-12-15')
+  })
+
+  it('rejects incomplete years from OCR glitches', () => {
+    expect(bestExpiryFromText('202-12-15').best).toBeNull()
+    expect(bestExpiryFromText('15/12/202-').best).toBeNull()
+  })
 })

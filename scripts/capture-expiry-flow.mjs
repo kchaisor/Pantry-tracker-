@@ -8,7 +8,7 @@ import { verifyDistinctExpiryScreenshots } from './expiryScreenshotVerify.mjs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
 const outDir = '/opt/cursor/artifacts'
-const baseUrl = 'http://127.0.0.1:4173/'
+const baseUrl = 'http://127.0.0.1:4173/Pantry-tracker-/'
 
 function waitForServer(url, timeoutMs = 30_000) {
   const start = Date.now()
@@ -39,10 +39,15 @@ async function screenshotExpiryBlock(page, editor, outPath) {
   await expiry.screenshot({ path: outPath })
 }
 
-const preview = spawn('npm', ['run', 'preview', '--', '--host', '127.0.0.1', '--port', '4173'], {
-  cwd: root,
-  stdio: 'ignore',
-})
+const preview = spawn(
+  'npm',
+  ['run', 'preview:pages', '--', '--host', '127.0.0.1', '--port', '4173', '--strictPort'],
+  {
+    cwd: root,
+    stdio: 'ignore',
+    env: { ...process.env, GITHUB_PAGES: 'true' },
+  },
+)
 
 try {
   await waitForServer(baseUrl)
@@ -97,15 +102,15 @@ try {
 
   const pngBase64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
-    canvas.width = 480
-    canvas.height = 140
+    canvas.width = 520
+    canvas.height = 160
     const ctx = canvas.getContext('2d')
     if (!ctx) return ''
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#111111'
-    ctx.font = 'bold 32px Arial'
-    ctx.fillText('BEST BEFORE 15/03/2027', 24, 82)
+    ctx.fillStyle = '#000000'
+    ctx.font = 'bold 36px Arial'
+    ctx.fillText('BEST BEFORE 15/12/2026', 16, 96)
     return canvas.toDataURL('image/png').split(',')[1]
   })
   await writeFile(labelPath, Buffer.from(pngBase64, 'base64'))
