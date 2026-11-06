@@ -41,12 +41,16 @@ function expandYear(twoOrFour: number): number {
   return twoOrFour >= 70 ? 1900 + twoOrFour : 2000 + twoOrFour
 }
 
+function validYearDigits(raw: string): boolean {
+  return raw.length === 2 || raw.length === 4
+}
+
 function normalizeOcrText(raw: string): string {
   return raw
     .replace(/\r/g, '\n')
     .replace(/bef0re/gi, 'before')
     .replace(/(\d)[oO](\d)/g, '$10$2')
-    .replace(/(\d)[oO](?=[/.\-])/g, '$10')
+    .replace(/(\d)[oO](?=[-./])/g, '$10')
     .replace(/[oO](?=\d)/g, '0')
     .replace(/(\d)[|Il](\d)/g, '$11$2')
     .replace(/\s+/g, ' ')
@@ -77,17 +81,32 @@ function parseNumericDates(line: string, out: ExpiryParseCandidate[], baseScore:
   const slash = /\b(\d{1,2})\s*[/.\\-]\s*(\d{1,2})\s*[/.\\-]\s*(\d{2,4})\b/g
   let m: RegExpExecArray | null
   while ((m = slash.exec(line))) {
+    const yDigits = m[3]
+    if (!validYearDigits(yDigits)) continue
     const d = Number(m[1])
     const mo = Number(m[2])
-    const y = expandYear(Number(m[3]))
+    const y = expandYear(Number(yDigits))
     pushCandidate(out, toIso(y, mo, d), baseScore + 10, m[0])
+  }
+
+  const spaced = /\b(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})\b/g
+  while ((m = spaced.exec(line))) {
+    const yDigits = m[3]
+    if (!validYearDigits(yDigits)) continue
+    const d = Number(m[1])
+    const mo = Number(m[2])
+    if (d > 31 || mo > 12) continue
+    const y = expandYear(Number(yDigits))
+    pushCandidate(out, toIso(y, mo, d), baseScore + 9, m[0])
   }
 
   const compact = /\b(\d{2})(\d{2})(\d{2,4})\b/g
   while ((m = compact.exec(line))) {
+    const yDigits = m[3]
+    if (!validYearDigits(yDigits)) continue
     const d = Number(m[1])
     const mo = Number(m[2])
-    const y = expandYear(Number(m[3]))
+    const y = expandYear(Number(yDigits))
     if (d <= 31 && mo <= 12) {
       pushCandidate(out, toIso(y, mo, d), baseScore + 4, m[0])
     }
@@ -98,9 +117,11 @@ function parseMonthYear(line: string, out: ExpiryParseCandidate[], baseScore: nu
   const re = /\b([A-Za-z]{3})\.?\s*['']?(\d{2,4})\b/g
   let m: RegExpExecArray | null
   while ((m = re.exec(line))) {
+    const yDigits = m[2]
+    if (!validYearDigits(yDigits)) continue
     const month = monthFromToken(m[1])
     if (!month) continue
-    const y = expandYear(Number(m[2]))
+    const y = expandYear(Number(yDigits))
     const lastDay = new Date(y, month, 0).getDate()
     pushCandidate(out, toIso(y, month, lastDay), baseScore + 6, m[0])
   }
@@ -110,16 +131,18 @@ function parseDayMonthYearWords(line: string, out: ExpiryParseCandidate[], baseS
   const re = /\b(\d{1,2})\s+([A-Za-z]{3})\.?\s+(\d{2,4})\b/g
   let m: RegExpExecArray | null
   while ((m = re.exec(line))) {
+    const yDigits = m[3]
+    if (!validYearDigits(yDigits)) continue
     const d = Number(m[1])
     const month = monthFromToken(m[2])
     if (!month) continue
-    const y = expandYear(Number(m[3]))
+    const y = expandYear(Number(yDigits))
     pushCandidate(out, toIso(y, month, d), baseScore + 12, m[0])
   }
 }
 
 const PREFIX =
-  /(?:best\s*before|use\s*by|exp(?:iry)?|bb|ub)\s*[:\.]?\s*/gi
+  /(?:best\s*before|use\s*by|exp(?:iry)?|bb|ub)\s*[:.]?\s*/gi
 
 function stripExpiryPrefix(line: string): { stripped: string; hasPrefix: boolean } {
   const stripped = line.replace(PREFIX, '')
