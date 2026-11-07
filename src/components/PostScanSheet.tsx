@@ -30,7 +30,6 @@ interface PostScanSheetProps {
   onClose: () => void
   onSave: (draft: ItemDraft, packSize: number | null) => Promise<void>
   onMoreDetails: (draft: ItemDraft) => void
-  onPickDate: () => void
 }
 
 const FILL_LABELS: Record<FillFraction, string> = {
@@ -51,7 +50,6 @@ export function PostScanSheet({
   onClose,
   onSave,
   onMoreDetails,
-  onPickDate,
 }: PostScanSheetProps) {
   const titleId = useId()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -260,9 +258,16 @@ export function PostScanSheet({
             >
               {ocrBusy ? 'Reading…' : 'Photo'}
             </button>
-            <button type="button" className="chip expiry-chip" onClick={() => onPickDate()}>
-              Pick date…
-            </button>
+            <label className="chip expiry-chip expiry-date-chip">
+              {expiry || 'Pick date…'}
+              <input
+                type="date"
+                className="expiry-native-date"
+                value={expiry}
+                aria-label="Pick expiry date"
+                onChange={(event) => applyExpiry(event.target.value, false)}
+              />
+            </label>
           </div>
           <input
             ref={fileRef}

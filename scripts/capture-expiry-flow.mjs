@@ -100,17 +100,28 @@ try {
   const chipPath = path.join(outDir, 'pantry-expiry-chip.png')
   await screenshotExpiryBlock(page, editor, chipPath)
 
+  await dateInput.click()
+  await dateInput.fill('2027-01-27')
+  await page.waitForFunction(() => {
+    const input = document.querySelector('.editor-sheet input[type="date"]')
+    return input instanceof HTMLInputElement && input.value === '2027-01-27'
+  })
+  const pickerPath = path.join(outDir, 'pantry-expiry-date-picker.png')
+  await screenshotExpiryBlock(page, editor, pickerPath)
+
   const pngBase64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
-    canvas.width = 520
+    canvas.width = 560
     canvas.height = 160
     const ctx = canvas.getContext('2d')
     if (!ctx) return ''
-    ctx.fillStyle = '#ffffff'
+    ctx.fillStyle = '#f7f3e8'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#000000'
-    ctx.font = 'bold 36px Arial'
-    ctx.fillText('BEST BEFORE 15/12/2026', 16, 96)
+    ctx.fillStyle = '#1a1a1a'
+    ctx.font = 'bold 32px Arial'
+    ctx.fillText('BEST BEFORE: 27/01/2027', 14, 92)
+    ctx.font = '20px Arial'
+    ctx.fillText('26211051200', 14, 132)
     return canvas.toDataURL('image/png').split(',')[1]
   })
   await writeFile(labelPath, Buffer.from(pngBase64, 'base64'))

@@ -71,4 +71,28 @@ describe('parseExpiryDatesFromText', () => {
     expect(bestExpiryFromText('202-12-15').best).toBeNull()
     expect(bestExpiryFromText('15/12/202-').best).toBeNull()
   })
+
+  it('parses Pure Valley style BEST BEFORE with colon and leading-zero month', () => {
+    expect(bestExpiryFromText('BEST BEFORE: 27/01/2027').best).toBe('2027-01-27')
+    expect(bestExpiryFromText('BEST BEFORE: 027/01/2027').best).toBe('2027-01-27')
+  })
+
+  it('prefers prefixed expiry over lot code on the same line', () => {
+    const { best } = bestExpiryFromText('BEST BEFORE: 27/01/2027 26211051200')
+    expect(best).toBe('2027-01-27')
+  })
+
+  it('does not treat long lot codes as expiry', () => {
+    expect(bestExpiryFromText('26211051200').best).toBeNull()
+    expect(bestExpiryFromText('Lot 26211051200').best).toBeNull()
+  })
+
+  it('parses noisy inkjet OCR with spaces instead of slashes', () => {
+    expect(bestExpiryFromText('BEST BEFORE: 27 01 2027').best).toBe('2027-01-27')
+  })
+
+  it('salvages fragmented BEST BEFORE inkjet without slashes', () => {
+    expect(bestExpiryFromText('BEST BEFORE 027 01 2027').best).toBe('2027-01-27')
+    expect(bestExpiryFromText('use by 7 01 2028').best).toBe('2028-01-07')
+  })
 })

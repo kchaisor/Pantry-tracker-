@@ -25,3 +25,4 @@ public/vendor/tesseract
 *.njsproj
 *.sln
 *.sw?
+eng.traineddata

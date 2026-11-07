@@ -795,6 +795,47 @@ textarea:focus-visible {
   gap: 6px;
 }
 
+.expiry-field-label {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.expiry-row input[type='date'].expiry-date-input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 12px 14px;
+  font-size: 16px;
+  min-width: 0;
+}
+
+.expiry-date-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.expiry-native-date {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .expiry-input-suggested {
   border-color: var(--sage-strong);
   background: color-mix(in srgb, var(--sage-soft) 70%, var(--surface));

@@ -1,4 +1,5 @@
-import { bestExpiryFromText } from './expiryDateParse.ts'
+import { bestExpiryFromText, parseExpiryDatesFromText } from './expiryDateParse.ts'
+import { buildExpiryOcrCanvases, maxOcrLongEdge, prepareDotMatrixInkCanvas } from './expiryOcrFrames.ts'
 
 export type ExpiryOcrResult =
   | { status: 'ok'; best: string; alternatives: string[]; rawText: string }
@@ -6,6 +7,8 @@ export type ExpiryOcrResult =
   | { status: 'error'; message: string }
 
 const TESS_LANG_PATH = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int'
+
+const CONFIDENT_PARSE_SCORE = 18
 
 /** Builds same-origin URLs so Tesseract loads under Vite `base` (e.g. `/Pantry-tracker-/`). */
 export function resolveTesseractBrowserAssetUrls(appBase: string, origin: string): {
@@ -34,8 +37,6 @@ export function getTesseractBrowserAssetUrls(): {
   return resolveTesseractBrowserAssetUrls(appBase, origin)
 }
 
-const MAX_OCR_SIDE = 1600
-
 /** Returns a canvas: tesseract.js does not accept ImageBitmap as recognize() input in the browser. */
 export async function prepareImageForExpiryOcr(file: File): Promise<HTMLCanvasElement> {
   let bitmap: ImageBitmap
@@ -54,7 +55,8 @@ export async function prepareImageForExpiryOcr(file: File): Promise<HTMLCanvasEl
     const h = bitmap.height
     if (!w || !h) throw new Error('Invalid image dimensions.')
 
-    const scale = Math.min(1, MAX_OCR_SIDE / Math.max(w, h))
+    const maxSide = maxOcrLongEdge()
+    const scale = Math.min(1, maxSide / Math.max(w, h))
     const tw = Math.max(1, Math.round(w * scale))
     const th = Math.max(1, Math.round(h * scale))
 
@@ -64,7 +66,7 @@ export async function prepareImageForExpiryOcr(file: File): Promise<HTMLCanvasEl
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas not available.')
 
-    ctx.filter = 'contrast(1.2) brightness(1.05)'
+    ctx.filter = 'contrast(1.15) brightness(1.03)'
     ctx.drawImage(bitmap, 0, 0, tw, th)
 
     return canvas
@@ -86,20 +88,66 @@ export async function runExpiryOcrOnFile(file: File): Promise<ExpiryOcrResult> {
 
     try {
       await worker.setParameters({
-        tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-        tessedit_char_whitelist:
-          '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/.:\\- ',
+        tessedit_pageseg_mode: PSM.AUTO,
+        user_defined_dpi: '300',
       })
 
-      const canvas = await prepareImageForExpiryOcr(file)
-      const {
-        data: { text },
-      } = await worker.recognize(canvas)
-      const trimmed = text.trim()
-      if (!trimmed) return { status: 'empty', rawText: '' }
-      const { best, alternatives } = bestExpiryFromText(trimmed)
-      if (!best) return { status: 'empty', rawText: trimmed }
-      return { status: 'ok', best, alternatives, rawText: trimmed }
+      const prepared = await prepareImageForExpiryOcr(file)
+      const frames = buildExpiryOcrCanvases(prepared)
+      const parts: string[] = []
+
+      const tryCombined = (): ExpiryOcrResult | null => {
+        const combined = parts.join('\n').trim()
+        if (!combined) return null
+        const { best, alternatives } = bestExpiryFromText(combined)
+        if (!best) return null
+        return { status: 'ok', best, alternatives, rawText: combined }
+      }
+
+      const ingest = (text: string): ExpiryOcrResult | null => {
+        const chunk = text.trim()
+        if (!chunk) return null
+        parts.push(chunk)
+        const ranked = parseExpiryDatesFromText(parts.join('\n'))
+        if (ranked[0] && ranked[0].score >= CONFIDENT_PARSE_SCORE) {
+          return tryCombined()
+        }
+        return null
+      }
+
+      for (const frame of frames) {
+        const lineish = frame.width > frame.height * 1.3
+        await worker.setParameters({
+          tessedit_pageseg_mode: lineish ? PSM.SINGLE_LINE : PSM.AUTO,
+          tessedit_char_whitelist: '',
+        })
+        const {
+          data: { text },
+        } = await worker.recognize(frame)
+        const hit = ingest(text)
+        if (hit) return hit
+      }
+
+      const ink = prepareDotMatrixInkCanvas(prepared)
+      for (const psm of [PSM.SINGLE_LINE, PSM.SINGLE_BLOCK]) {
+        await worker.setParameters({
+          tessedit_pageseg_mode: psm,
+          tessedit_char_whitelist: '0123456789/:.',
+        })
+        const {
+          data: { text },
+        } = await worker.recognize(ink)
+        const hit = ingest(text)
+        if (hit) return hit
+      }
+
+      await worker.setParameters({ tessedit_char_whitelist: '' })
+
+      const combined = parts.join('\n').trim()
+      if (!combined) return { status: 'empty', rawText: '' }
+      const { best, alternatives } = bestExpiryFromText(combined)
+      if (!best) return { status: 'empty', rawText: combined }
+      return { status: 'ok', best, alternatives, rawText: combined }
     } finally {
       await worker.terminate()
     }

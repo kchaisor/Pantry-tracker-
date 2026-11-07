@@ -48,6 +48,8 @@ function validYearDigits(raw: string): boolean {
 function normalizeOcrText(raw: string): string {
   return raw
     .replace(/\r/g, '\n')
+    .replace(/best\s*before\s*:/gi, 'best before: ')
+    .replace(/\b0(\d{2})([/.\\-])/g, '$1$2')
     .replace(/bef0re/gi, 'before')
     .replace(/(\d)[oO](\d)/g, '$10$2')
     .replace(/(\d)[oO](?=[-./])/g, '$10')
@@ -102,6 +104,7 @@ function parseNumericDates(line: string, out: ExpiryParseCandidate[], baseScore:
 
   const compact = /\b(\d{2})(\d{2})(\d{2,4})\b/g
   while ((m = compact.exec(line))) {
+    if (m[0].length > 8) continue
     const yDigits = m[3]
     if (!validYearDigits(yDigits)) continue
     const d = Number(m[1])
@@ -144,6 +147,20 @@ function parseDayMonthYearWords(line: string, out: ExpiryParseCandidate[], baseS
 const PREFIX =
   /(?:best\s*before|use\s*by|exp(?:iry)?|bb|ub)\s*[:.]?\s*/gi
 
+function parsePrefixedLoose(line: string, out: ExpiryParseCandidate[], baseScore: number): void {
+  const re =
+    /(?:best\s*before|use\s*by)\s*:?\s*0?(\d{1,2})\s*[/.\\\s-]+\s*0?(\d{1,2})\s*[/.\\\s-]+\s*(\d{2,4})\b/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(line))) {
+    const yDigits = m[3]
+    if (!validYearDigits(yDigits)) continue
+    const d = Number(m[1])
+    const mo = Number(m[2])
+    const y = expandYear(Number(yDigits))
+    pushCandidate(out, toIso(y, mo, d), baseScore + 18, m[0])
+  }
+}
+
 function stripExpiryPrefix(line: string): { stripped: string; hasPrefix: boolean } {
   const stripped = line.replace(PREFIX, '')
   return { stripped, hasPrefix: stripped.length < line.length }
@@ -170,6 +187,7 @@ export function parseExpiryDatesFromText(raw: string): ExpiryParseCandidate[] {
     parseDayMonthYearWords(stripped, out, base)
     parseMonthYear(stripped, out, base)
     if (hasPrefix) {
+      parsePrefixedLoose(line, out, base)
       parseNumericDates(line, out, base)
       parseDayMonthYearWords(line, out, base)
     }
@@ -177,9 +195,41 @@ export function parseExpiryDatesFromText(raw: string): ExpiryParseCandidate[] {
 
   parseNumericDates(text, out, 0)
   parseDayMonthYearWords(text, out, 0)
+  parseSalvageBestBefore(text, out)
 
   out.sort((a, b) => b.score - a.score || b.iso.localeCompare(a.iso))
   return out
+}
+
+/** When OCR splits BEST BEFORE from the date across tokens or drops slashes. */
+function parseSalvageBestBefore(raw: string, out: ExpiryParseCandidate[]): void {
+  const lower = raw.toLowerCase()
+  const idx = lower.search(/best\s*before|use\s*by/)
+  if (idx < 0) return
+  const win = raw.slice(idx, idx + 140)
+
+  const dayM = win.match(/(?:best\s*before|use\s*by)\s*:?\s*(?:0+)?(\d{1,2})\b/i)
+  if (!dayM) return
+
+  const d = Number(dayM[1])
+  if (d < 1 || d > 31) return
+
+  const slash = win.match(/(?:0+)?\d{1,2}\s*[/.\\-]\s*(0?\d{1,2})\s*[/.\\-]\s*(\d{2,4})\b/)
+  if (slash && validYearDigits(slash[2])) {
+    const mo = Number(slash[1])
+    const y = expandYear(Number(slash[2]))
+    pushCandidate(out, toIso(y, mo, d), 17, slash[0])
+    return
+  }
+
+  const yearM = win.match(/\b(202[4-9])\b/) ?? raw.match(/\b(202[4-9])\b/)
+  const monthM = win.match(/\b(0[1-9]|1[0-2])\b/)
+  if (!yearM || !monthM) return
+
+  const mo = Number(monthM[1])
+  const y = Number(yearM[1])
+  if (mo < 1 || mo > 12) return
+  pushCandidate(out, toIso(y, mo, d), 15, win.slice(0, 48).trim())
 }
 
 export function bestExpiryFromText(raw: string): {

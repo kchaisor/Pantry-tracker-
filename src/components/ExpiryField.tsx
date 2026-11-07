@@ -27,6 +27,7 @@ export function ExpiryField({
   const localRef = useRef<HTMLInputElement>(null)
   const expiryRef = inputRef ?? localRef
   const fileRef = useRef<HTMLInputElement>(null)
+  const expiryInputId = useId()
   const ocrHintId = useId()
   const [suggested, setSuggested] = useState(false)
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -85,7 +86,9 @@ export function ExpiryField({
         return
       }
       if (result.status === 'empty') {
-        setOcrNotice('No date found on the photo — try a closer shot of the expiry line.')
+        setOcrNotice(
+          'No date found on the photo — try a closer shot of the expiry line, or set the date below.',
+        )
         return
       }
       setOcrPick({ best: result.best, alternatives: result.alternatives })
@@ -102,14 +105,18 @@ export function ExpiryField({
       className={`expiry-block ${highlightScan ? 'expiry-block--scan' : ''} ${showSuggested ? 'expiry-block--suggested' : ''}`}
       data-scan-expiry={highlightScan ? 'true' : undefined}
     >
-      <label className="expiry-label-row">
-        Expiry / best before
+      <div className="expiry-label-row">
+        <span className="expiry-field-label" id={expiryInputId}>
+          Expiry / best before
+        </span>
         <div className="expiry-row">
           <input
             ref={expiryRef}
+            id={`${expiryInputId}-input`}
             type="date"
             value={value}
-            className={showSuggested ? 'expiry-input-suggested' : undefined}
+            className={`expiry-date-input${showSuggested ? ' expiry-input-suggested' : ''}`}
+            aria-labelledby={expiryInputId}
             aria-describedby={ocrPick || ocrNotice ? ocrHintId : undefined}
             onChange={(event) => onManualChange(event.target.value)}
           />
@@ -133,7 +140,7 @@ export function ExpiryField({
             onChange={(event) => void onPhotoSelected(event.target.files?.[0])}
           />
         </div>
-      </label>
+      </div>
 
       {gs1Applied && value ? (
         <p className="form-hint">Expiry from GS1 barcode (AI 17).</p>

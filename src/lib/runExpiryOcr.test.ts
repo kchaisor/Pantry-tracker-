@@ -23,8 +23,9 @@ describe('resolveTesseractBrowserAssetUrls', () => {
 })
 
 describe('runExpiryOcr implementation invariants', () => {
-  it('passes a canvas to worker.recognize (ImageBitmap breaks tesseract.js loadImage in browsers)', () => {
-    expect(runExpiryOcrSource).toContain('await worker.recognize(canvas)')
+  it('recognizes HTMLCanvasElement frames, not ImageBitmap', () => {
+    expect(runExpiryOcrSource).toContain('worker.recognize(frame)')
     expect(runExpiryOcrSource).toContain('HTMLCanvasElement')
+    expect(runExpiryOcrSource).toContain('buildExpiryOcrCanvases')
   })
 })
