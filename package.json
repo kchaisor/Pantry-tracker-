@@ -4,9 +4,11 @@
   "version": "1.2.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/copy-tesseract-assets.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && GITHUB_PAGES=true vite build",
+    "preview:pages": "vite preview --host 127.0.0.1 --port 4173",
     "lint": "oxlint",
     "test": "vitest run && node scripts/test-gas-merge.mjs && node --test scripts/expiryScreenshotVerify.test.mjs",
     "preview": "vite preview",
