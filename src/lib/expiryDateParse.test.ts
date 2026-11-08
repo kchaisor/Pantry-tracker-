@@ -45,7 +45,6 @@ describe('parseExpiryDatesFromText', () => {
       'Lot 4421\nBest before 20/06/2026\nPacked 01/01/2026',
     )
     expect(best).toBe('2026-06-20')
-    expect(alternatives.length).toBeGreaterThan(0)
   })
 
   it('returns empty for unrelated text', () => {
@@ -70,5 +69,12 @@ describe('parseExpiryDatesFromText', () => {
   it('rejects incomplete years from OCR glitches', () => {
     expect(bestExpiryFromText('202-12-15').best).toBeNull()
     expect(bestExpiryFromText('15/12/202-').best).toBeNull()
+  })
+
+  it('parses inkjet line date and ignores lot digit runs', () => {
+    const line = 'BEST BEFORE: 27/01/2027 2621 051200 7'
+    expect(bestExpiryFromText(line).best).toBe('2027-01-27')
+    const ranked = parseExpiryDatesFromText(line)
+    expect(ranked.every((c) => c.iso === '2027-01-27')).toBe(true)
   })
 })

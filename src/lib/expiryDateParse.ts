@@ -77,6 +77,12 @@ function pushCandidate(
   out.push({ iso, score, snippet })
 }
 
+function digitBounded(line: string, start: number, end: number): boolean {
+  const before = start > 0 ? line[start - 1] : ' '
+  const after = end < line.length ? line[end] : ' '
+  return !/\d/.test(before) && !/\d/.test(after)
+}
+
 function parseNumericDates(line: string, out: ExpiryParseCandidate[], baseScore: number): void {
   const slash = /\b(\d{1,2})\s*[/.\\-]\s*(\d{1,2})\s*[/.\\-]\s*(\d{2,4})\b/g
   let m: RegExpExecArray | null
@@ -102,11 +108,14 @@ function parseNumericDates(line: string, out: ExpiryParseCandidate[], baseScore:
 
   const compact = /\b(\d{2})(\d{2})(\d{2,4})\b/g
   while ((m = compact.exec(line))) {
+    if (!digitBounded(line, m.index, m.index + m[0].length)) continue
     const yDigits = m[3]
     if (!validYearDigits(yDigits)) continue
+    if (m[0].length === 8 && yDigits.length !== 4) continue
     const d = Number(m[1])
     const mo = Number(m[2])
     const y = expandYear(Number(yDigits))
+    if (y < 2010 || y > 2099) continue
     if (d <= 31 && mo <= 12) {
       pushCandidate(out, toIso(y, mo, d), baseScore + 4, m[0])
     }
@@ -149,6 +158,12 @@ function stripExpiryPrefix(line: string): { stripped: string; hasPrefix: boolean
   return { stripped, hasPrefix: stripped.length < line.length }
 }
 
+function trimAfterFirstSlashDate(line: string): string {
+  const m = /(\d{1,2}\s*[/.\\-]\s*\d{1,2}\s*[/.\\-]\s*\d{2,4})/.exec(line)
+  if (!m || m.index == null) return line
+  return line.slice(0, m.index + m[0].length)
+}
+
 /**
  * Extract AU-style expiry dates from OCR or label text (day-first).
  */
@@ -163,19 +178,27 @@ export function parseExpiryDatesFromText(raw: string): ExpiryParseCandidate[] {
     const lower = line.toLowerCase()
     const noise =
       /\b(packed|lot|mfg|manufact|batch)\b/.test(lower) && !/\b(best|use|exp|bb|ub)\b/.test(lower)
-    const { stripped, hasPrefix } = stripExpiryPrefix(line)
+    const lotTail = /\b(?:lot|batch|mfg|packed)\b/i
+    const lotSplit = line.search(lotTail)
+    const primaryLine = lotSplit > 0 ? line.slice(0, lotSplit) : line
+    const datedSlice = trimAfterFirstSlashDate(primaryLine)
+    const { stripped, hasPrefix } = stripExpiryPrefix(datedSlice)
     let base = hasPrefix ? 14 : 0
     if (noise) base -= 10
     parseNumericDates(stripped, out, base)
     parseDayMonthYearWords(stripped, out, base)
     parseMonthYear(stripped, out, base)
-    if (hasPrefix) {
-      parseNumericDates(line, out, base)
-      parseDayMonthYearWords(line, out, base)
+    if (hasPrefix && primaryLine !== line) {
+      parseNumericDates(primaryLine, out, base)
+      parseDayMonthYearWords(primaryLine, out, base)
     }
   }
 
-  parseNumericDates(text, out, 0)
+  const textForCompact = text
+    .split(/\n|;/)
+    .map((line) => trimAfterFirstSlashDate(line))
+    .join('\n')
+  parseNumericDates(textForCompact, out, 0)
   parseDayMonthYearWords(text, out, 0)
 
   out.sort((a, b) => b.score - a.score || b.iso.localeCompare(a.iso))

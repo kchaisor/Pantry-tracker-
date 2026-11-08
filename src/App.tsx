@@ -105,7 +105,6 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const scanDemoRan = useRef(false)
   const fixtureLoaded = useRef(false)
-  const datePickRef = useRef<HTMLInputElement>(null)
 
   const lowItems = useMemo(() => attentionItems(pantry.items), [pantry.items])
 
@@ -499,21 +498,6 @@ export default function App() {
         />
       ) : null}
 
-      <input
-        ref={datePickRef}
-        type="date"
-        className="sr-only"
-        aria-hidden="true"
-        tabIndex={-1}
-        onChange={(event) => {
-          if (!postScan) return
-          setPostScan({
-            ...postScan,
-            draft: { ...postScan.draft, expiryDate: event.target.value },
-          })
-        }}
-      />
-
       {toast ? <Toast message={toast} /> : null}
 
       {postScan ? (
@@ -536,7 +520,6 @@ export default function App() {
             })
             setPostScan(null)
           }}
-          onPickDate={() => datePickRef.current?.showPicker?.() ?? datePickRef.current?.click()}
         />
       ) : null}
 

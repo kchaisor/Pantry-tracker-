@@ -814,6 +814,102 @@ textarea:focus-visible {
   min-width: 64px;
 }
 
+.expiry-field-label,
+.expiry-type-label {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.expiry-type-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.expiry-type-row input {
+  min-height: 44px;
+}
+
+.post-scan-expiry-row {
+  margin-bottom: 4px;
+}
+
+.expiry-photo-sheet {
+  max-height: min(92vh, 720px);
+  overflow: auto;
+}
+
+.expiry-photo-guide-frame {
+  position: relative;
+  margin: 12px 0;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--surface) 80%, var(--ink) 4%);
+}
+
+.expiry-photo-guide-box {
+  position: absolute;
+  left: 6%;
+  top: 38%;
+  width: 88%;
+  height: 22%;
+  border: 2px solid var(--amber);
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.08) inset;
+}
+
+.expiry-photo-crop-stage {
+  position: relative;
+  margin: 8px 0 12px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: #111;
+}
+
+.expiry-photo-crop-image {
+  position: absolute;
+  inset: 0;
+}
+
+.expiry-photo-crop-box {
+  position: absolute;
+  border: 2px solid var(--amber);
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.expiry-photo-slider {
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.expiry-photo-crop-preview {
+  display: block;
+  width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.expiry-photo-typed {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.expiry-photo-typed input {
+  min-height: 44px;
+}
+
 .card-brand {
   font-weight: 650;
   color: var(--ink);
