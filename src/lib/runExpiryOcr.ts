@@ -1,40 +1,43 @@
 import { bestExpiryFromText } from './expiryDateParse.ts'
+import { getTesseractBrowserAssetUrls } from './expiryOcrAssets.ts'
 
 export type ExpiryOcrResult =
   | { status: 'ok'; best: string; alternatives: string[]; rawText: string }
   | { status: 'empty'; rawText: string }
   | { status: 'error'; message: string }
 
-const TESS_LANG_PATH = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int'
-
-/** Builds same-origin URLs so Tesseract loads under Vite `base` (e.g. `/Pantry-tracker-/`). */
-export function resolveTesseractBrowserAssetUrls(appBase: string, origin: string): {
-  workerPath: string
-  corePath: string
-  langPath: string
-} {
-  const normalizedBase = appBase.endsWith('/') ? appBase : `${appBase}/`
-  const root = new URL('vendor/tesseract/', `${origin}${normalizedBase}`).href
-  const dir = root.replace(/\/$/, '')
-  return {
-    workerPath: `${dir}/worker.min.js`,
-    corePath: dir,
-    langPath: TESS_LANG_PATH,
-  }
-}
-
-export function getTesseractBrowserAssetUrls(): {
-  workerPath: string
-  corePath: string
-  langPath: string
-} {
-  const appBase = import.meta.env.BASE_URL || '/'
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://localhost'
-  return resolveTesseractBrowserAssetUrls(appBase, origin)
-}
+export { resolveTesseractBrowserAssetUrls, getTesseractBrowserAssetUrls } from './expiryOcrAssets.ts'
 
 const MAX_OCR_SIDE = 1600
+
+let tessWorkerSingleton: import('tesseract.js').Worker | null = null
+
+async function getTesseractWorker(): Promise<import('tesseract.js').Worker> {
+  if (tessWorkerSingleton) return tessWorkerSingleton
+  const { createWorker, OEM } = await import('tesseract.js')
+  const { workerPath, corePath, langPath } = getTesseractBrowserAssetUrls()
+  const worker = await createWorker('eng', OEM.LSTM_ONLY, {
+    workerPath,
+    corePath,
+    langPath,
+  })
+  tessWorkerSingleton = worker
+  return worker
+}
+
+export async function runTesseractRawLineOnCanvas(canvas: HTMLCanvasElement): Promise<string> {
+  const { PSM } = await import('tesseract.js')
+  const worker = await getTesseractWorker()
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.RAW_LINE,
+    tessedit_char_whitelist:
+      '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/.:\\- ',
+  })
+  const {
+    data: { text },
+  } = await worker.recognize(canvas)
+  return text.trim()
+}
 
 /** Returns a canvas: tesseract.js does not accept ImageBitmap as recognize() input in the browser. */
 export async function prepareImageForExpiryOcr(file: File): Promise<HTMLCanvasElement> {
@@ -73,36 +76,15 @@ export async function prepareImageForExpiryOcr(file: File): Promise<HTMLCanvasEl
   }
 }
 
+/** @deprecated Full-frame path; prefer crop flow via runExpiryPhotoReadOnCrop. */
 export async function runExpiryOcrOnFile(file: File): Promise<ExpiryOcrResult> {
   try {
-    const { createWorker, OEM, PSM } = await import('tesseract.js')
-    const { workerPath, corePath, langPath } = getTesseractBrowserAssetUrls()
-
-    const worker = await createWorker('eng', OEM.LSTM_ONLY, {
-      workerPath,
-      corePath,
-      langPath,
-    })
-
-    try {
-      await worker.setParameters({
-        tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-        tessedit_char_whitelist:
-          '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/.:\\- ',
-      })
-
-      const canvas = await prepareImageForExpiryOcr(file)
-      const {
-        data: { text },
-      } = await worker.recognize(canvas)
-      const trimmed = text.trim()
-      if (!trimmed) return { status: 'empty', rawText: '' }
-      const { best, alternatives } = bestExpiryFromText(trimmed)
-      if (!best) return { status: 'empty', rawText: trimmed }
-      return { status: 'ok', best, alternatives, rawText: trimmed }
-    } finally {
-      await worker.terminate()
-    }
+    const canvas = await prepareImageForExpiryOcr(file)
+    const trimmed = await runTesseractRawLineOnCanvas(canvas)
+    if (!trimmed) return { status: 'empty', rawText: '' }
+    const { best, alternatives } = bestExpiryFromText(trimmed)
+    if (!best) return { status: 'empty', rawText: trimmed }
+    return { status: 'ok', best, alternatives, rawText: trimmed }
   } catch (err) {
     console.error('[expiry OCR]', err)
     return {

@@ -14,11 +14,13 @@ import {
   quantityForFraction,
   type FillFraction,
 } from '../lib/packSize.ts'
-import { runExpiryOcrOnFile } from '../lib/runExpiryOcr.ts'
+import { bestExpiryFromText } from '../lib/expiryDateParse.ts'
+import { formatExpiryAu } from '../lib/expiryDateDisplay.ts'
 import { formatQuantity } from '../lib/query.ts'
 import { unitLabel } from '../lib/units.ts'
 import type { ItemDraft } from '../types.ts'
 import { ProductThumb } from './ProductThumb.tsx'
+import { ExpiryPhotoSheet } from './ExpiryPhotoSheet.tsx'
 
 interface PostScanSheetProps {
   draft: ItemDraft
@@ -30,7 +32,6 @@ interface PostScanSheetProps {
   onClose: () => void
   onSave: (draft: ItemDraft, packSize: number | null) => Promise<void>
   onMoreDetails: (draft: ItemDraft) => void
-  onPickDate: () => void
 }
 
 const FILL_LABELS: Record<FillFraction, string> = {
@@ -51,7 +52,6 @@ export function PostScanSheet({
   onClose,
   onSave,
   onMoreDetails,
-  onPickDate,
 }: PostScanSheetProps) {
   const titleId = useId()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -59,9 +59,10 @@ export function PostScanSheet({
   const [fill, setFill] = useState<FillFraction>(1)
   const [expiry, setExpiry] = useState(draft.expiryDate)
   const [expirySuggested, setExpirySuggested] = useState(false)
-  const [ocrBusy, setOcrBusy] = useState(false)
-  const [ocrPick, setOcrPick] = useState<{ best: string; alternatives: string[] } | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [typedExpiry, setTypedExpiry] = useState('')
+  const [typedNotice, setTypedNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -113,30 +114,24 @@ export function PostScanSheet({
   const applyExpiry = (iso: string, suggested = false) => {
     setExpiry(iso)
     setExpirySuggested(suggested)
-    setOcrPick(null)
-    setOcrNotice(null)
+    setTypedNotice(null)
   }
 
-  const onPhotoSelected = async (file: File | undefined) => {
+  const onPhotoFile = (file: File | undefined) => {
     if (!file) return
-    setOcrBusy(true)
-    setOcrNotice(null)
-    setOcrPick(null)
-    try {
-      const result = await runExpiryOcrOnFile(file)
-      if (result.status === 'error') {
-        setOcrNotice(result.message)
-        return
-      }
-      if (result.status === 'empty') {
-        setOcrNotice('No date found on the photo — try a closer shot of the expiry line.')
-        return
-      }
-      setOcrPick({ best: result.best, alternatives: result.alternatives })
-    } finally {
-      setOcrBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
+    setPhotoFile(file)
+    setPhotoOpen(true)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const applyTyped = () => {
+    const iso = bestExpiryFromText(typedExpiry).best
+    if (!iso) {
+      setTypedNotice('No valid date — try DD/MM/YYYY or 27 January 2027.')
+      return
     }
+    applyExpiry(iso, false)
+    setTypedExpiry('')
   }
 
   const submit = async () => {
@@ -234,13 +229,22 @@ export function PostScanSheet({
             <p className="form-hint">From GS1 barcode: {expiry}</p>
           ) : showSuggested ? (
             <p className="form-hint expiry-suggest-hint">
-              Suggested {expiry} from category — change, tap a chip, or scan the pack.
+              Suggested {formatExpiryAu(expiry)} from category — change, tap a chip, or scan the pack.
             </p>
           ) : highlightExpiry && !expiry ? (
             <p className="form-hint">Pick a preset, photo, or calendar date.</p>
           ) : expiry ? (
-            <p className="form-hint">Expires {expiry}</p>
+            <p className="form-hint">Expires {formatExpiryAu(expiry)}</p>
           ) : null}
+          <div className="expiry-row post-scan-expiry-row">
+            <input
+              type="date"
+              value={expiry}
+              className={showSuggested ? 'expiry-input-suggested' : undefined}
+              onChange={(event) => applyExpiry(event.target.value, false)}
+              aria-label="Expiry date"
+            />
+          </div>
           <div className="chips wrap expiry-quick-chips">
             {EXPIRY_PRESETS.map((preset) => (
               <button
@@ -252,16 +256,27 @@ export function PostScanSheet({
                 {preset.label}
               </button>
             ))}
-            <button
-              type="button"
-              className="chip expiry-chip"
-              disabled={ocrBusy}
-              onClick={() => fileRef.current?.click()}
-            >
-              {ocrBusy ? 'Reading…' : 'Photo'}
+            <button type="button" className="chip expiry-chip" onClick={() => setPhotoOpen(true)}>
+              Photo
             </button>
-            <button type="button" className="chip expiry-chip" onClick={() => onPickDate()}>
-              Pick date…
+          </div>
+          <label className="expiry-type-label" htmlFor={`${titleId}-typed`}>
+            Type or dictate (mic on keyboard)
+          </label>
+          <div className="expiry-type-row">
+            <input
+              id={`${titleId}-typed`}
+              type="text"
+              inputMode="text"
+              placeholder="27/01/2027"
+              value={typedExpiry}
+              onChange={(e) => {
+                setTypedExpiry(e.target.value)
+                setTypedNotice(null)
+              }}
+            />
+            <button type="button" className="chip" onClick={applyTyped}>
+              Parse
             </button>
           </div>
           <input
@@ -272,27 +287,9 @@ export function PostScanSheet({
             className="sr-only"
             tabIndex={-1}
             aria-hidden="true"
-            onChange={(event) => void onPhotoSelected(event.target.files?.[0])}
+            onChange={(event) => onPhotoFile(event.target.files?.[0])}
           />
-          {ocrNotice ? <p className="form-hint">{ocrNotice}</p> : null}
-          {ocrPick ? (
-            <div className="expiry-ocr-confirm" role="group" aria-label="Confirm scanned expiry">
-              <p className="form-hint">Found on pack — confirm before saving:</p>
-              <div className="chips wrap">
-                <button type="button" className="chip is-on" onClick={() => applyExpiry(ocrPick.best, false)}>
-                  {ocrPick.best}
-                </button>
-                {ocrPick.alternatives.map((alt) => (
-                  <button key={alt} type="button" className="chip" onClick={() => applyExpiry(alt, false)}>
-                    {alt}
-                  </button>
-                ))}
-                <button type="button" className="chip" onClick={() => setOcrPick(null)}>
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {typedNotice ? <p className="form-hint">{typedNotice}</p> : null}
         </div>
 
         <button type="button" className="primary-btn post-scan-save" disabled={busy || !draft.name.trim()} onClick={() => void submit()}>
@@ -313,6 +310,17 @@ export function PostScanSheet({
           More details (category, threshold, notes…)
         </button>
       </section>
+
+      <ExpiryPhotoSheet
+        open={photoOpen}
+        file={photoFile}
+        onClose={() => {
+          setPhotoOpen(false)
+          setPhotoFile(null)
+        }}
+        onConfirm={(iso) => applyExpiry(iso, false)}
+        onRequestPhoto={() => fileRef.current?.click()}
+      />
     </div>
   )
 }

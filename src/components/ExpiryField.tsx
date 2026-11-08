@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { suggestedExpiryForCategory } from '../lib/categoryShelfLife.ts'
 import { EXPIRY_QUICK_CHIPS, expiryFromQuickChip } from '../lib/expiryQuickChips.ts'
-import { runExpiryOcrOnFile } from '../lib/runExpiryOcr.ts'
+import { formatExpiryAu } from '../lib/expiryDateDisplay.ts'
+import { bestExpiryFromText } from '../lib/expiryDateParse.ts'
+import { ExpiryPhotoSheet } from './ExpiryPhotoSheet.tsx'
 
 interface ExpiryFieldProps {
   value: string
@@ -28,10 +30,12 @@ export function ExpiryField({
   const expiryRef = inputRef ?? localRef
   const fileRef = useRef<HTMLInputElement>(null)
   const ocrHintId = useId()
+  const typedId = useId()
   const [suggested, setSuggested] = useState(false)
-  const [ocrBusy, setOcrBusy] = useState(false)
-  const [ocrPick, setOcrPick] = useState<{ best: string; alternatives: string[] } | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [typedExpiry, setTypedExpiry] = useState('')
+  const [typedNotice, setTypedNotice] = useState<string | null>(null)
 
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -60,39 +64,33 @@ export function ExpiryField({
   const setDate = (iso: string, fromSuggestion = false) => {
     onChange(iso)
     setSuggested(fromSuggestion)
-    setOcrPick(null)
-    setOcrNotice(null)
+    setTypedNotice(null)
     onDismissScanHints?.()
   }
 
   const onManualChange = (iso: string) => {
     setSuggested(false)
-    setOcrPick(null)
-    setOcrNotice(null)
+    setTypedNotice(null)
     onChange(iso)
     onDismissScanHints?.()
   }
 
-  const onPhotoSelected = async (file: File | undefined) => {
+  const onPhotoFile = (file: File | undefined) => {
     if (!file) return
-    setOcrBusy(true)
-    setOcrNotice(null)
-    setOcrPick(null)
-    try {
-      const result = await runExpiryOcrOnFile(file)
-      if (result.status === 'error') {
-        setOcrNotice(result.message)
-        return
-      }
-      if (result.status === 'empty') {
-        setOcrNotice('No date found on the photo — try a closer shot of the expiry line.')
-        return
-      }
-      setOcrPick({ best: result.best, alternatives: result.alternatives })
-    } finally {
-      setOcrBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
+    setPhotoFile(file)
+    setPhotoOpen(true)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const applyTyped = () => {
+    const iso = bestExpiryFromText(typedExpiry).best
+    if (!iso) {
+      setTypedNotice('No valid date — try DD/MM/YYYY or 27 January 2027.')
+      return
     }
+    setDate(iso, false)
+    setTypedExpiry('')
+    setTypedNotice(null)
   }
 
   const showSuggested = suggested && value && !gs1Applied
@@ -102,72 +100,72 @@ export function ExpiryField({
       className={`expiry-block ${highlightScan ? 'expiry-block--scan' : ''} ${showSuggested ? 'expiry-block--suggested' : ''}`}
       data-scan-expiry={highlightScan ? 'true' : undefined}
     >
-      <label className="expiry-label-row">
-        Expiry / best before
-        <div className="expiry-row">
-          <input
-            ref={expiryRef}
-            type="date"
-            value={value}
-            className={showSuggested ? 'expiry-input-suggested' : undefined}
-            aria-describedby={ocrPick || ocrNotice ? ocrHintId : undefined}
-            onChange={(event) => onManualChange(event.target.value)}
-          />
-          <button
-            type="button"
-            className="ghost-btn expiry-photo-btn"
-            disabled={ocrBusy}
-            aria-label="Scan expiry date from photo"
-            onClick={() => fileRef.current?.click()}
-          >
-            {ocrBusy ? '…' : 'Photo'}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={(event) => void onPhotoSelected(event.target.files?.[0])}
-          />
-        </div>
+      <div className="expiry-field-label">Expiry / best before</div>
+      <div className="expiry-row">
+        <input
+          ref={expiryRef}
+          type="date"
+          value={value}
+          className={showSuggested ? 'expiry-input-suggested' : undefined}
+          aria-describedby={typedNotice ? ocrHintId : undefined}
+          onChange={(event) => onManualChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="ghost-btn expiry-photo-btn"
+          aria-label="Scan expiry date from photo"
+          onClick={() => setPhotoOpen(true)}
+        >
+          Photo
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => onPhotoFile(event.target.files?.[0])}
+        />
+      </div>
+
+      <label className="expiry-type-label" htmlFor={typedId}>
+        Type or dictate (mic on keyboard)
       </label>
+      <div className="expiry-type-row">
+        <input
+          id={typedId}
+          type="text"
+          inputMode="text"
+          enterKeyHint="done"
+          autoComplete="off"
+          placeholder="27/01/2027"
+          value={typedExpiry}
+          onChange={(e) => {
+            setTypedExpiry(e.target.value)
+            setTypedNotice(null)
+          }}
+        />
+        <button type="button" className="chip" onClick={applyTyped}>
+          Parse
+        </button>
+      </div>
 
       {gs1Applied && value ? (
         <p className="form-hint">Expiry from GS1 barcode (AI 17).</p>
       ) : showSuggested ? (
         <p className="form-hint expiry-suggest-hint">
-          Suggested from category — change, use a chip, or clear.
+          Suggested {formatExpiryAu(value)} from category — change, use a chip, or clear.
         </p>
       ) : highlightScan ? (
         <p className="form-hint">Plain barcodes do not include expiry — pick a date or scan the pack.</p>
       ) : null}
 
-      {ocrNotice ? (
+      {typedNotice ? (
         <p className="form-hint" id={ocrHintId}>
-          {ocrNotice}
+          {typedNotice}
         </p>
-      ) : null}
-
-      {ocrPick ? (
-        <div className="expiry-ocr-confirm" id={ocrHintId} role="group" aria-label="Confirm scanned expiry">
-          <p className="form-hint">Found on pack — confirm before saving:</p>
-          <div className="chips wrap">
-            <button type="button" className="chip is-on" onClick={() => setDate(ocrPick.best, false)}>
-              {ocrPick.best}
-            </button>
-            {ocrPick.alternatives.map((alt) => (
-              <button key={alt} type="button" className="chip" onClick={() => setDate(alt, false)}>
-                {alt}
-              </button>
-            ))}
-            <button type="button" className="chip" onClick={() => setOcrPick(null)}>
-              Dismiss
-            </button>
-          </div>
-        </div>
       ) : null}
 
       <div className="chips wrap expiry-quick-chips" aria-label="Expiry shortcuts">
@@ -195,6 +193,17 @@ export function ExpiryField({
           Clear
         </button>
       </div>
+
+      <ExpiryPhotoSheet
+        open={photoOpen}
+        file={photoFile}
+        onClose={() => {
+          setPhotoOpen(false)
+          setPhotoFile(null)
+        }}
+        onConfirm={(iso) => setDate(iso, false)}
+        onRequestPhoto={() => fileRef.current?.click()}
+      />
     </div>
   )
 }

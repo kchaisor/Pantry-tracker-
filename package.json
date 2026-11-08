@@ -4,7 +4,8 @@
   "version": "1.2.0",
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/copy-tesseract-assets.mjs",
+    "postinstall": "node scripts/copy-expiry-ocr-assets.mjs",
+    "verify:ppocr-crop": "node scripts/verify-ppocr-date-crop.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && GITHUB_PAGES=true vite build",
@@ -17,6 +18,7 @@
   "dependencies": {
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
+    "onnxruntime-web": "^1.21.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tesseract.js": "^6.0.1"
@@ -26,7 +28,9 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "onnxruntime-node": "^1.21.0",
     "oxlint": "^1.81.0",
+    "sharp": "^0.34.4",
     "playwright": "^1.49.1",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
