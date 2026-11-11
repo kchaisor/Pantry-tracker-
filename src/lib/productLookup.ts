@@ -16,7 +16,7 @@ export interface ProductLookup {
 }
 
 const OFF_FIELDS =
-  'product_name,product_name_en,generic_name,brands,categories_tags,quantity,product_quantity,product_quantity_unit,image_front_small_url,image_front_thumb_url,image_url'
+  'product_name,product_name_en,generic_name,brands,categories_tags,quantity,product_quantity,product_quantity_unit,image_front_url,image_front_small_url,image_front_thumb_url,image_url'
 const LOOKUP_MS = 4500
 
 /** Offline-safe catalog hits (checked before network). */
@@ -90,7 +90,12 @@ export function primaryBrand(raw: string): string {
 }
 
 export function imageFromOff(product: Record<string, unknown>): string | null {
-  const keys = ['image_front_small_url', 'image_front_thumb_url', 'image_url'] as const
+  const keys = [
+    'image_front_url',
+    'image_front_small_url',
+    'image_front_thumb_url',
+    'image_url',
+  ] as const
   for (const key of keys) {
     const value = product[key]
     if (typeof value === 'string' && value.startsWith('http')) return value
@@ -148,17 +153,15 @@ export function cacheLookupThumbnail(
   })
 }
 
-/**
- * Best-effort public UPC/EAN name lookup. Fails open: network, CORS, or
- * unknown codes just return null so Kelvin can type the name.
- */
-export async function lookupProduct(barcode: string): Promise<ProductLookup | null> {
-  const code = normalizeBarcode(barcode)
-  if (!code || !/^\d{8,14}$/.test(code)) return null
+function mergeLookup(base: ProductLookup, overlay: ProductLookup): ProductLookup {
+  return {
+    ...base,
+    ...overlay,
+    imageUrl: overlay.imageUrl ?? base.imageUrl,
+  }
+}
 
-  const builtin = BUILTIN_BARCODE_CATALOG[code]
-  if (builtin) return builtin
-
+async function fetchOffProduct(code: string): Promise<ProductLookup | null> {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), LOOKUP_MS)
@@ -180,6 +183,21 @@ export async function lookupProduct(barcode: string): Promise<ProductLookup | nu
   } finally {
     window.clearTimeout(timer)
   }
+}
+
+/**
+ * Best-effort public UPC/EAN name lookup. Fails open: network, CORS, or
+ * unknown codes just return null so Kelvin can type the name.
+ */
+export async function lookupProduct(barcode: string): Promise<ProductLookup | null> {
+  const code = normalizeBarcode(barcode)
+  if (!code || !/^\d{8,14}$/.test(code)) return null
+
+  const builtin = BUILTIN_BARCODE_CATALOG[code]
+  const off = await fetchOffProduct(code)
+  if (off && builtin) return mergeLookup(builtin, off)
+  if (off) return off
+  return builtin ?? null
 }
 
 /** Best-effort name search on Open Food Facts (non-blocking enrichment). */

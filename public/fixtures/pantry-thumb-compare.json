@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "items": [
+    {
+      "id": "9d5fa6d4-4b67-46d8-9307-4ee4934e6b7c",
+      "name": "Chung Jung One Seasoned Bean Paste (Ssamjang)",
+      "quantity": 170,
+      "unit": "g",
+      "category": "Kitchen",
+      "expiryDate": null,
+      "notes": "Screenshot fixture: simulates sheet column N with a custom photo URL",
+      "lowStockThreshold": 40,
+      "barcode": "",
+      "createdAt": 1791700745706,
+      "updatedAt": 1791705423090,
+      "deleted": false,
+      "brand": ""
+    },
+    {
+      "id": "la-espanola-screenshot",
+      "name": "La Española Extra Virgin Olive Oil",
+      "quantity": 500,
+      "unit": "mL",
+      "category": "Kitchen",
+      "expiryDate": null,
+      "notes": "Screenshot fixture: barcode + custom image_url",
+      "lowStockThreshold": 200,
+      "barcode": "8410660098804",
+      "createdAt": 1791700745706,
+      "updatedAt": 1791705423090,
+      "deleted": false,
+      "brand": "La Española"
+    }
+  ]
+}

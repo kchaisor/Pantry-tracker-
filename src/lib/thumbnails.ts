@@ -9,6 +9,8 @@ import {
 import type { PantryItem } from '../types.ts'
 
 export const ITEM_THUMBNAILS_KEY = 'pantry.itemThumbnails'
+/** Device-local user-captured or custom sheet URLs kept when catalog product art wins in the UI. */
+export const USER_ITEM_PHOTOS_KEY = 'pantry.userItemPhotos'
 
 export type VesselKind = 'bottle' | 'jar' | 'box' | 'roll' | 'pack' | 'spray' | 'stick' | 'tub'
 
@@ -62,19 +64,101 @@ export function persistItemThumbnail(entry: {
   writeThumbnailStore(store)
 }
 
-/** Same URL the UI shows: stored imageUrl, cache, or bundled slug. */
+export function readUserPhotoStore(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(USER_ITEM_PHOTOS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, string>
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export function persistUserItemPhoto(id: string, url: string): void {
+  const key = id.trim()
+  const value = url.trim()
+  if (!key || !value) return
+  const store = readUserPhotoStore()
+  if (store[key] === value) return
+  store[key] = value
+  try {
+    localStorage.setItem(USER_ITEM_PHOTOS_KEY, JSON.stringify(store))
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Public product-shot hosts (OFF, bundled repo, major AU retail CDNs). */
+export function isProductImageUrl(url: string): boolean {
+  const u = url.trim().toLowerCase()
+  if (!u.startsWith('http')) return false
+  if (u.includes('openfoodfacts.org')) return true
+  if (u.includes('productimages.coles.com.au')) return true
+  if (u.includes('/thumbs/') && u.endsWith('.jpg')) return true
+  if (u.includes('cdn.shopify.com')) return true
+  if (u.includes('contentstack.com')) return true
+  if (u.includes('world.openfoodfacts.org')) return true
+  return false
+}
+
+/**
+ * Custom / user-origin image URLs (sheet column N, legacy cache, data URLs).
+ * Catalog items with a bundled slug treat any other http URL as user-owned.
+ */
+export function isUserCapturedImageUrl(
+  url: string,
+  item?: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
+): boolean {
+  const trimmed = url.trim()
+  if (!trimmed) return false
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return true
+  const slug = item ? slugForItem(item) : null
+  if (slug) {
+    const bundled = bundledThumbUrl(slug)
+    if (trimmed === bundled) return false
+    if (isProductImageUrl(trimmed)) return false
+    return true
+  }
+  return !isProductImageUrl(trimmed)
+}
+
+function archiveUserPhotoIfNeeded(
+  item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
+): void {
+  const url = item.imageUrl?.trim()
+  if (!url || !item.id?.trim()) return
+  if (!isUserCapturedImageUrl(url, item)) return
+  persistUserItemPhoto(item.id, url)
+}
+
+/** Product URL for sheet sync (bundled / OFF), not the user-capture fallback. */
 export function resolveCanonicalImageUrl(
   item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
 ): string | null {
-  if (item.imageUrl?.trim()) return item.imageUrl.trim()
+  const slug = slugForItem(item)
+  if (slug) return bundledThumbUrl(slug)
+  const url = item.imageUrl?.trim()
+  if (url && !isUserCapturedImageUrl(url, item)) return url
   return resolveItemThumbnail(item)
 }
 
-/** Resolve thumbnail URL for an item (bundled assets preferred for known products). */
+/**
+ * Resolve thumbnail URL for list/card UI.
+ * Priority: bundled catalog → product imageUrl / OFF cache → user photo (stored locally).
+ */
 export function resolveItemThumbnail(
   item: Pick<PantryItem, 'id' | 'name' | 'barcode' | 'unit' | 'category' | 'imageUrl'>,
 ): string | null {
-  if (item.imageUrl?.trim()) return item.imageUrl.trim()
+  const slug = slugForItem(item)
+  if (slug) {
+    archiveUserPhotoIfNeeded(item)
+    return bundledThumbUrl(slug)
+  }
+
+  const url = item.imageUrl?.trim()
+  if (url && !isUserCapturedImageUrl(url, item)) return url
+
   const store = readThumbnailStore()
   if (item.id && store.byId[item.id]) return store.byId[item.id]
   const code = normalizeBarcode(item.barcode)
@@ -82,8 +166,11 @@ export function resolveItemThumbnail(
   const nameKey = normalizeName(item.name)
   if (nameKey && store.byName[nameKey]) return store.byName[nameKey]
 
-  const slug = slugForItem(item)
-  if (slug) return bundledThumbUrl(slug)
+  if (item.id) {
+    const user = readUserPhotoStore()[item.id]
+    if (user) return user
+  }
+  if (url && isUserCapturedImageUrl(url, item)) return url
 
   return null
 }
@@ -91,20 +178,20 @@ export function resolveItemThumbnail(
 export function resolveThumbnailByBarcode(barcode: string): string | null {
   const code = normalizeBarcode(barcode)
   if (!code) return null
-  const store = readThumbnailStore()
-  if (store.byBarcode[code]) return store.byBarcode[code]
   const slug = THUMB_BARCODE_SLUG[code]
   if (slug) return bundledThumbUrl(slug)
+  const store = readThumbnailStore()
+  if (store.byBarcode[code]) return store.byBarcode[code]
   return null
 }
 
 export function resolveThumbnailByName(name: string): string | null {
   const nameKey = normalizeName(name)
   if (!nameKey) return null
-  const store = readThumbnailStore()
-  if (store.byName[nameKey]) return store.byName[nameKey]
   const slug = slugForItemName(name)
   if (slug) return bundledThumbUrl(slug)
+  const store = readThumbnailStore()
+  if (store.byName[nameKey]) return store.byName[nameKey]
   return null
 }
 
@@ -137,7 +224,7 @@ export async function enrichThumbnailInBackground(
   searchByName?: (name: string) => Promise<{ imageUrl?: string | null } | null>,
   onUrl?: (url: string) => void,
 ): Promise<string | null> {
-  if (item.imageUrl?.trim() || resolveItemThumbnail(item)) return null
+  if (slugForItem(item) || item.imageUrl?.trim()) return null
 
   const code = normalizeBarcode(item.barcode)
   if (code) {
